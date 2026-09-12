@@ -1,0 +1,915 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>นับสต๊อก・在庫カウント</title>
+<style>
+  :root{
+    --paper:#E9EBE6; --card:#FFFFFF; --ink:#15181B; --muted:#6A7168; --line:#D2D7CB;
+    --nori:#21252A; --ume:#B32133; --dashi:#A0701A; --take:#2E6B4F;
+    --radius:10px; --bar:70px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Noto Sans Thai","Thonburi","Leelawadee UI","Hiragino Kaku Gothic ProN","Noto Sans JP","Segoe UI",sans-serif;
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;
+    padding-bottom:calc(var(--bar) + env(safe-area-inset-bottom));
+  }
+  .num{font-variant-numeric:tabular-nums}
+  button{font:inherit;color:inherit;cursor:pointer}
+  input,select{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--take);outline-offset:2px}
+
+  /* 併記 */
+  .th{display:block;line-height:1.3}
+  .ja{display:block;color:var(--muted);font-size:.78em;font-weight:400;line-height:1.3}
+  .inline .th,.inline .ja{display:inline}
+  .inline .ja::before{content:"／"}
+  body.lang-th .ja{display:none!important}
+  body.lang-ja .th{display:none!important}
+  header .ja{color:#9DA398}
+  .tabs .ja,.go .ja{color:inherit;opacity:.72}
+
+  header{position:sticky;top:0;z-index:20;background:var(--nori);color:#F2F3EF;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px}
+  .hrow{display:flex;align-items:baseline;gap:10px}
+  .hrow h1{margin:0;font-size:16px;font-weight:700}
+  .hrow .date{margin-left:auto;font-size:12px;color:#A9AFA6;text-align:right;white-space:nowrap}
+  .tabs{display:flex;gap:6px;margin-top:10px}
+  .tabs button{flex:1;background:transparent;border:1px solid #444A51;color:#C3C8BE;border-radius:9px;padding:6px 8px;font-size:13px;text-align:center}
+  .tabs button[aria-current="true"]{background:#F2F3EF;color:var(--nori);border-color:#F2F3EF;font-weight:700}
+
+  main{padding:12px 12px 8px;max-width:620px;margin:0 auto}
+  .hint{color:var(--muted);font-size:12.5px;margin:0 2px 12px}
+
+  .filter{display:flex;gap:6px;overflow-x:auto;padding:0 2px 10px;margin:0 -2px 4px;scrollbar-width:none}
+  .filter::-webkit-scrollbar{display:none}
+  .filter button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 14px;font-size:13.5px;white-space:nowrap}
+  .filter button[aria-pressed="true"]{background:var(--nori);color:#F2F3EF;border-color:var(--nori);font-weight:700}
+  .filter .rest{color:var(--ume);font-size:11px;margin-left:5px}
+  .filter button[aria-pressed="true"] .rest{color:#F0A6AE}
+
+  .group{margin-bottom:18px}
+  .ghead{display:flex;align-items:center;gap:8px;margin:0 2px 7px;flex-wrap:wrap}
+  .ghead h2{margin:0;font-size:14px;font-weight:700}
+  .ghead .state{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap}
+  .state.open{background:#E4EFE8;color:var(--take)}
+  .state.shut{background:#FAEFD9;color:#7A5A12}
+  .ghead .next{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap}
+  .rows{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+
+  .row{display:flex;align-items:center;gap:10px;padding:10px 11px;border-top:1px solid var(--line)}
+  .row:first-child{border-top:none}
+  .row .info{flex:1;min-width:0}
+  .row .nm{font-weight:600;font-size:15px;line-height:1.3}
+  .row .nm .ja{font-size:.8em}
+  .row .meta{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .row .flag{font-size:12px;font-weight:700;margin-top:3px}
+  .flag.need{color:var(--ume)} .flag.ok{color:var(--take)} .flag.none{color:var(--dashi)}
+  .stepper{display:flex;align-items:center;gap:4px;flex:none}
+  .stepper button{width:38px;height:38px;border:1px solid var(--line);background:#F7F8F5;border-radius:8px;font-size:20px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+  .stepper button:active{background:#E6E8E2}
+  .stepper input{width:62px;height:38px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;padding:0 2px}
+  .stepper input::placeholder{color:#B7BCB2;font-weight:500;font-size:14px}
+  .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .stepper input[type=number]{-moz-appearance:textfield}
+
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(233,235,230,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:8px 12px calc(8px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px}
+  .bar .sum{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35}
+  .bar .sum b{display:block;font-size:14.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .go{flex:none;background:var(--nori);color:#F2F3EF;border:none;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:700;text-align:center}
+  .go:disabled{background:#B9BEB4;color:#EFF0EC}
+
+  .slip{background:var(--card);border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);margin:0 0 18px;position:relative}
+  .slip::before{content:"";position:absolute;left:-1px;right:-1px;top:-7px;height:8px;background:radial-gradient(circle at 5px 0, transparent 5px, var(--line) 5px, var(--line) 6px, transparent 6px) repeat-x;background-size:10px 8px}
+  .slip.shut{opacity:.82}
+  .slip .sup{display:flex;align-items:center;gap:8px;padding:12px 13px 10px;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+  .slip .sup h3{margin:0;font-size:16px;font-weight:700}
+  .slip .sup .cnt{font-size:12px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .slip .closed{width:100%;font-size:12px;color:#7A5A12;background:#FBF3E3;border:1px solid #E6D3A8;border-radius:7px;padding:7px 9px;margin-top:2px}
+  .line{display:flex;gap:10px;padding:9px 13px;border-bottom:1px dashed var(--line);align-items:baseline}
+  .line .n{flex:1} .line .q{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .line .p{width:86px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
+  .line .sub{font-size:11px;color:var(--muted);margin-top:1px}
+  .slip .foot{display:flex;align-items:center;padding:11px 13px;gap:10px}
+  .slip .foot .lbl{font-size:12px;color:var(--muted)}
+  .slip .foot .amt{margin-left:auto;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+  .acts{display:flex;gap:8px;padding:0 13px 13px}
+  .acts a,.acts button{flex:1;text-align:center;text-decoration:none;border-radius:9px;padding:10px 8px;font-size:13.5px;font-weight:700;border:1px solid var(--nori)}
+  .acts a{background:var(--nori);color:#F2F3EF}
+  .acts a .ja{color:#B9BEB4}
+  .acts a[aria-disabled="true"]{background:#DDE0D9;color:#8C9289;border-color:var(--line);pointer-events:none}
+  .acts button{background:transparent;color:var(--nori)}
+  .secttl{margin:2px 2px 9px;font-size:12px;font-weight:700;color:var(--muted)}
+  .total{display:flex;align-items:center;padding:14px 4px 4px;border-top:2px solid var(--ink);margin-top:4px}
+  .total .lbl{font-size:13.5px;font-weight:700}
+  .total .amt{margin-left:auto;font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+  .note{margin:10px 2px 0;font-size:11.5px;color:var(--muted)}
+  .warn{background:#FBF3E3;border:1px solid #E6D3A8;color:#7A5A12;border-radius:9px;padding:10px 12px;font-size:12.5px;margin-bottom:14px}
+  .empty{text-align:center;color:var(--muted);padding:44px 20px;font-size:14px}
+  .sheetbox{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:13px;margin:18px 0 8px}
+  .sheetbox h4{margin:0 0 4px;font-size:14px}
+  .sheetbox p{margin:0 0 10px;font-size:11.5px;color:var(--muted)}
+  .sheetbox .brow{display:flex;gap:8px}
+  .sheetbox .brow button{flex:1;border-radius:9px;padding:11px 8px;font-size:13.5px;font-weight:700;border:1px solid var(--take);background:var(--take);color:#fff}
+  .sheetbox .brow button.alt{background:transparent;color:var(--take)}
+  .sheetbox .brow button:disabled{opacity:.5}
+
+  .mcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;overflow:hidden}
+  .mcard summary{padding:11px 13px;font-weight:600;list-style:none;display:flex;gap:8px;align-items:center}
+  .mcard summary::-webkit-details-marker{display:none}
+  .mcard summary .nmwrap{flex:1;min-width:0}
+  .mcard summary .s{font-size:11.5px;color:var(--muted);font-weight:400;text-align:right;white-space:nowrap}
+  .fields{padding:2px 13px 13px;border-top:1px dashed var(--line);display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .fields label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+  .fields label.wide{grid-column:1/-1}
+  .fields label>.th,.fields label>.ja{display:inline}
+  .fields label>.ja::before{content:"／"}
+  .fields input,.fields select{border:1px solid var(--line);border-radius:7px;padding:9px;background:#FBFCFA;font-size:15px;width:100%;color:var(--ink)}
+  .days{grid-column:1/-1}
+  .days > .cap{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+  .days .dd{display:flex;gap:4px}
+  .days .dd button{flex:1;padding:9px 0;border:1px solid var(--line);background:#FBFCFA;border-radius:7px;font-size:13px}
+  .days .dd button[aria-pressed="true"]{background:var(--ume);color:#fff;border-color:var(--ume);font-weight:700}
+  .hol{grid-column:1/-1}
+  .hol > .cap{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+  .hol .add{display:flex;gap:6px}
+  .hol .add input{flex:1;border:1px solid var(--line);border-radius:7px;padding:9px;background:#FBFCFA;font-size:15px}
+  .hol .add button{flex:none;padding:9px 14px;border:1px solid var(--line);background:#F7F8F5;border-radius:7px;font-size:14px}
+  .holchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+  .holchips button{border:1px solid var(--line);background:#FBFCFA;border-radius:999px;padding:5px 10px;font-size:12px}
+  .holchips button::after{content:" ×";color:var(--ume);font-weight:700}
+  .del{grid-column:1/-1;justify-self:start;background:none;border:none;color:var(--ume);font-size:12.5px;padding:4px 0;text-decoration:underline}
+  .addbtn{width:100%;padding:13px;border:1px dashed var(--line);background:transparent;border-radius:var(--radius);color:var(--muted);font-weight:600;margin-bottom:22px}
+  .setrow{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 13px;margin-bottom:18px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .setrow label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+  .setrow label.wide{grid-column:1/-1}
+  .setrow label>.th,.setrow label>.ja{display:inline}
+  .setrow label>.ja::before{content:"／"}
+  .setrow input,.setrow select{border:1px solid var(--line);border-radius:7px;padding:9px;background:#FBFCFA;font-size:15px;width:100%;color:var(--ink)}
+  .setrow .cap{grid-column:1/-1;font-size:11px;color:var(--muted);margin:-2px 0 0}
+  .danger{margin:4px 0 0;background:none;border:none;color:var(--ume);font-size:12.5px;text-decoration:underline;padding:0}
+
+  .toast{position:fixed;left:50%;bottom:calc(var(--bar) + 18px);transform:translateX(-50%);background:var(--nori);color:#F2F3EF;padding:10px 16px;border-radius:999px;font-size:13px;z-index:50;opacity:0;pointer-events:none;transition:opacity .18s;max-width:88%;text-align:center}
+  .toast.on{opacity:1}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header>
+  <div class="hrow">
+    <h1 id="storeTitle">นับสต๊อก</h1>
+    <span class="date num" id="today"></span>
+  </div>
+  <nav class="tabs">
+    <button data-nav="count" aria-current="true"><span class="th">นับสต๊อก</span><span class="ja">在庫を数える</span></button>
+    <button data-nav="result"><span class="th">รายการสั่งซื้อ</span><span class="ja">発注リスト</span></button>
+    <button data-nav="master"><span class="th">ตั้งค่า</span><span class="ja">設定</span></button>
+  </nav>
+</header>
+
+<main id="app"></main>
+<div class="bar" id="bar" hidden></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY = 'stock-order-app-v3';
+const WD_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+const WD_JA = ['日','月','火','水','木','金','土'];
+const DEFAULT_UNITS = ['g','kg','個','パック','袋','本','枚','缶','箱','ℓ','ml'];
+
+/* ---------- 文言 ---------- */
+const L = {
+  hintCount:['นับของบนชั้นแล้วกรอกจำนวน ช่องที่เว้นว่างจะไม่ถูกสั่งซื้อ','棚を数えて入力してください。空欄の品目は発注に含みません'],
+  noItems:['ยังไม่มีรายการ เพิ่มได้ที่หน้าตั้งค่า','品目がありません。設定で登録してください'],
+  all:['ทั้งหมด','すべて'],
+  canOrder:['สั่งได้วันนี้','本日発注可'],
+  cannotOrder:['วันนี้สั่งไม่ได้','本日は発注不可'],
+  nextIs:['สั่งได้ ','次は '],
+  cutoffAt:['ปิดรับ ','締切 '],
+  notFilled:['ยังไม่ได้กรอก','未入力'],
+  enough:['เพียงพอ','足りています'],
+  orderN:['สั่ง ','発注 '],
+  parIs:['มาตรฐาน ','基準 '],
+  filled:[' รายการที่กรอกแล้ว',' 品目 入力済み'],
+  shortN:[' รายการขาด・ประมาณ ',' 品目が不足・概算 '],
+  toResult:['ดูรายการสั่งซื้อ','発注リストへ'],
+  backCount:['กลับไปนับ','入力に戻る'],
+  noOrder:['ไม่มีรายการที่ต้องสั่ง','発注が必要な品目はありません'],
+  countFirst:['กรุณานับสต๊อกก่อน','まず在庫を数えてください'],
+  blankWarn:['ยังไม่ได้กรอก %n รายการ รายการที่ไม่ได้นับจะไม่รวมในการสั่งซื้อ','%n品目が未入力です。数えていない品目は発注数に入っていません'],
+  items:[' รายการ',' 品目'],
+  subtotal:['ยอดรวมโดยประมาณ','概算小計'],
+  openSite:['เปิดเว็บสั่งซื้อ','注文サイトを開く'],
+  noUrl:['ยังไม่ได้ตั้งค่า URL','注文URL未設定'],
+  copyOrder:['คัดลอกรายการ','発注内容をコピー'],
+  orderToday:['สั่งวันนี้','今日発注する'],
+  orderLater:['ยังสั่งไม่ได้วันนี้','今日は発注できない会社'],
+  todayTotal:['ยอดสั่งวันนี้','今日発注する分'],
+  laterTotal:['ยอดที่ต้องสั่งวันอื่น','別日に発注する分'],
+  priceNote:['คำนวณจากราคาที่บันทึกไว้ อาจต่างจากใบแจ้งหนี้จริง','単価は設定の金額で計算しています。実際の請求額とは異なることがあります'],
+  stock:['สต๊อก ','在庫 '],
+  copied:['คัดลอกแล้ว','コピーしました'],
+  copyFail:['คัดลอกไม่สำเร็จ','コピーできませんでした'],
+  supplier:['ซัพพลายเออร์','仕入先'],
+  noSupplier:['ยังไม่ได้กำหนดซัพพลายเออร์','仕入先未設定'],
+  itemSect:['รายการวัตถุดิบ','品目'],
+  supSect:['ซัพพลายเออร์','仕入先'],
+  addItem:['＋ เพิ่มรายการ','＋ 品目を追加'],
+  addSup:['＋ เพิ่มซัพพลายเออร์','＋ 仕入先を追加'],
+  delItem:['ลบรายการนี้','この品目を削除'],
+  delSup:['ลบซัพพลายเออร์นี้','この仕入先を削除'],
+  resetAll:['ล้างจำนวนที่กรอกทั้งหมด','在庫の入力をすべて消す'],
+  fStore:['ชื่อสาขา','店舗名'],
+  fCur:['สกุลเงิน','通貨'],
+  fLang:['ภาษาที่แสดง','表示言語'],
+  fGroup:['การจัดกลุ่มหน้านับ','在庫入力の並び'],
+  fName:['ชื่อรายการ (ไทย)','品目名（タイ語）'],
+  fNameJa:['ชื่อรายการ (ญี่ปุ่น)','品目名（日本語）'],
+  fCat:['หมวด','区分'],
+  fUnit:['หน่วย','単位'],
+  fPar:['สต๊อกมาตรฐาน','基準在庫'],
+  fLot:['หน่วยสั่งขั้นต่ำ (ล็อต)','発注ロット'],
+  fPrice:['ราคาต่อหน่วย','単価'],
+  fSupName:['ชื่อบริษัท','会社名'],
+  fUrl:['URL เว็บสั่งซื้อ','注文サイトのURL'],
+  fClosed:['วันหยุดประจำสัปดาห์ (สั่งไม่ได้)','定休日（発注できない曜日）'],
+  fCutoff:['เวลาปิดรับออเดอร์ (เลยเวลานี้นับเป็นวันทำการถัดไป)','発注の締切時刻（過ぎたら翌営業日あつかい）'],
+  fHoliday:['วันหยุดพิเศษ (ปีใหม่ สงกรานต์ ฯลฯ)','臨時休業日（年末年始・ソンクラーンなど）'],
+  addBtn:['เพิ่ม','追加'],
+  none:['ไม่มี','なし'],
+  noClosed:['ไม่มีวันหยุดประจำ','定休なし'],
+  nextOrderDay:['วันสั่งถัดไป ','次の発注日 '],
+  bySup:['ตามซัพพลายเออร์','仕入先ごと'],
+  byCat:['ตามหมวด','区分ごと'],
+  unitSect:['หน่วยที่ใช้ได้','使用できる単位'],
+  newUnit:['หน่วยใหม่ เช่น g, ชิ้น','新しい単位　例：g、個'],
+  delUnit:['ลบหน่วยนี้','この単位を削除'],
+  fPhone:['เบอร์โทร','電話番号'],
+  fEmail:['อีเมล','メール'],
+  fNote:['หมายเหตุ','メモ'],
+  sheetTitle:['บันทึกลง Google Sheet','スプレッドシートに保存'],
+  sheetDesc:['บันทึกสต๊อกวันนี้ ปริมาณที่ใช้ และจำนวนที่สั่ง ลงในสเปรดชีตของร้าน','今日の在庫・推定使用量・発注数をスプレッドシートに記録します'],
+  sheetSend:['บันทึกลงชีต','シートに保存'],
+  sheetCsv:['คัดลอกเป็น CSV','CSVをコピー'],
+  sheetSending:['กำลังบันทึก…','保存中…'],
+  sheetOk:['บันทึกลงชีตแล้ว','シートに保存しました'],
+  sheetErr:['บันทึกไม่สำเร็จ ตรวจสอบ URL ในหน้าตั้งค่า','保存できませんでした。設定のURLを確認してください'],
+  sheetNoUrl:['ยังไม่ได้ตั้งค่า URL ของชีต (หน้าตั้งค่า)','シートのURLが未設定です（設定画面）'],
+  fSheetUrl:['URL ของ Google Apps Script','Google Apps ScriptのURL'],
+  sheetCap:['วางลิงก์เว็บแอปที่ deploy จากสเปรดชีต','スプレッドシートから発行したウェブアプリのURLを貼り付けてください'],
+  used:['ใช้ไป (ประมาณ)','使用量（概算）'],
+  lastSent:['บันทึกครั้งล่าสุด ','前回の保存 '],
+  confirmDelItem:['ลบรายการนี้ใช่หรือไม่','この品目を削除します。よろしいですか？'],
+  confirmReset:['ล้างจำนวนที่กรอกทั้งหมด (การตั้งค่าจะยังอยู่)','入力した在庫数をすべて消します。設定は残ります'],
+  resetDone:['ล้างข้อมูลแล้ว','在庫の入力を消しました']
+};
+const two = k => `<span class="th">${L[k][0]}</span><span class="ja">${L[k][1]}</span>`;
+const one = k => `${L[k][0]}／${L[k][1]}`;
+const pick = k => state.lang === 'ja' ? L[k][1] : (state.lang === 'th' ? L[k][0] : L[k][0] + '／' + L[k][1]);
+
+/* ---------- サンプル ---------- */
+const SAMPLE_SUPS = [
+  {id:'s01', name:"Jae Toi's Shop Khlongtoey Market", nameJa:"Jae Toi's Shop Khlongtoey Market", url:"", phone:"089-898-8881", email:"", note:"LINEで注文", closed:[], holidays:[], cutoff:""},
+  {id:'s02', name:"Japan MARINO", nameJa:"Japan MARINO", url:"", phone:"", email:"", note:"", closed:[], holidays:[], cutoff:""},
+  {id:'s03', name:"King Marine Foods Co., Ltd", nameJa:"King Marine Foods Co., Ltd", url:"https://kingmarinefoods.co.th/", phone:"094-582-6767", email:"", note:"購買部 複数窓口あり(065-205-4644 / 062-058-2929 / 095-014-3414 / 066-080-6443 / 091-739-0255)。経理:091-739-4855(支払)、094-335-4497・066-081-3044(受領)", closed:[], holidays:[], cutoff:""},
+  {id:'s04', name:"Makro PRO", nameJa:"Makro PRO", url:"https://www.makro.pro/", phone:"", email:"", note:"", closed:[], holidays:[], cutoff:""},
+  {id:'s05', name:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", nameJa:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", url:"https://www.nishihara-shokai.co.jp/", phone:"098－286-0329 K.kittiya", email:"t.kawakami@nishihara-shokai.co.jp", note:"1000バーツ以上の注文で配送料無料", closed:[], holidays:[], cutoff:""},
+  {id:'s06', name:"Thai-German Meat Product Co., Ltd.", nameJa:"Thai-German Meat Product Co., Ltd.", url:"", phone:"66 38 570 279-81", email:"info@tgm.co.th", note:"", closed:[], holidays:[], cutoff:""},
+  {id:'s07', name:"kobeya(神戸屋)", nameJa:"神戸屋", url:"https://kobe-ya.co.th/", phone:"66 2-683-0173", email:"taniguchi.hideki@kobe-ya.com", note:"前日16時までに注文、翌日11時店着", closed:[], holidays:[], cutoff:"16:00"},
+  {id:'s08', name:"makotoya(誠屋)", nameJa:"誠屋", url:"https://makotoya-thailand.com/makoru/", phone:"02 258 1028", email:"makotoya.thailand@gmail.com", note:"", closed:[], holidays:[], cutoff:""},
+  {id:'s09', name:"shopee.th", nameJa:"shopee.th", url:"", phone:"", email:"", note:"", closed:[], holidays:[], cutoff:""},
+  {id:'s10', name:"ｍeisyoku(名古屋食糧)", nameJa:"名古屋食糧", url:"https://meisyoku.co.jp/", phone:"098-269-3930", email:"y-noritake@meisyoku.co.jp", note:"", closed:[], holidays:[], cutoff:""}
+];
+const SAMPLE_ITEMS = [
+  {id:'i001', cat:"ｍeisyoku(名古屋食糧)", name:"ข้าว", nameJa:"米", unit:'g', par:1000, lot:1000, price:120, supId:'s10'},
+  {id:'i002', cat:"kobeya(神戸屋)", name:"สาหร่ายโนริ", nameJa:"海苔", unit:'g', par:135, lot:135, price:450, supId:'s07'},
+  {id:'i003', cat:"Jae Toi's Shop Khlongtoey Market", name:"ต้นหอม", nameJa:"小葱", unit:'g', par:1000, lot:1000, price:100, supId:'s01'},
+  {id:'i004', cat:"Jae Toi's Shop Khlongtoey Market", name:"ต้นหอม", nameJa:"蔥", unit:'g', par:1000, lot:1000, price:80, supId:'s01'},
+  {id:'i005', cat:"Jae Toi's Shop Khlongtoey Market", name:"แครอท", nameJa:"人参", unit:'g', par:1000, lot:1000, price:35, supId:'s01'},
+  {id:'i006', cat:"Jae Toi's Shop Khlongtoey Market", name:"หัวไชเท้าไดคอน", nameJa:"大根", unit:'g', par:1000, lot:1000, price:35, supId:'s01'},
+  {id:'i007', cat:"Jae Toi's Shop Khlongtoey Market", name:"มันเทศ", nameJa:"さつまいも", unit:'g', par:1000, lot:1000, price:50, supId:'s01'},
+  {id:'i008', cat:"Jae Toi's Shop Khlongtoey Market", name:"หัวหอม", nameJa:"玉ねぎ", unit:'g', par:1000, lot:1000, price:45, supId:'s01'},
+  {id:'i009', cat:"Jae Toi's Shop Khlongtoey Market", name:"รากเบอร์ดอก", nameJa:"ごぼう", unit:'g', par:1000, lot:1000, price:100, supId:'s01'},
+  {id:'i010', cat:"Jae Toi's Shop Khlongtoey Market", name:"ไข่ต้ม", nameJa:"茹で卵", unit:'g', par:1000, lot:1000, price:102, supId:'s01'},
+  {id:'i011', cat:"Jae Toi's Shop Khlongtoey Market", name:"ใบชิโซะ", nameJa:"大葉", unit:'g', par:10, lot:10, price:20, supId:'s01'},
+  {id:'i012', cat:"makotoya(誠屋)", name:"บุก", nameJa:"こんにゃく", unit:'g', par:220, lot:220, price:36, supId:'s08'},
+  {id:'i013', cat:"Makro PRO", name:"เต้าหู้เนื้อเนียน", nameJa:"絹豆腐", unit:'g', par:300, lot:300, price:40, supId:'s04'},
+  {id:'i014', cat:"Jae Toi's Shop Khlongtoey Market", name:"เนื้อไก่ (50-60 กรัมต่อชิ้น)", nameJa:"鶏モモ肉骨なし (1カット50-60g)", unit:'g', par:1000, lot:1000, price:120, supId:'s01'},
+  {id:'i015', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"หมูสามชั้นหั่นบาง (หนา 1.5 มม. สำหรับชาบูชาบู)", nameJa:"豚バラスライス（1.5mmスライス シャブシャブ用）", unit:'g', par:1000, lot:1000, price:350, supId:'s05'},
+  {id:'i016', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"เนื้อวากิวหั่นบาง (หนา 1.5 มม. สำหรับชาบูชาบู)", nameJa:"和牛スライス（1.5mmスライス シャブシャブ用）", unit:'g', par:0, lot:1, price:0, supId:'s05'},
+  {id:'i017', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"เนื้อวัวหั่นบาง", nameJa:"牛スライス", unit:'g', par:1000, lot:1000, price:550, supId:'s05'},
+  {id:'i018', cat:"Jae Toi's Shop Khlongtoey Market", name:"เนื้อหมูบด", nameJa:"豚ミンチ", unit:'g', par:1000, lot:1000, price:160, supId:'s01'},
+  {id:'i019', cat:"Thai-German Meat Product Co., Ltd.", name:"หมูสามชั้นสไลซ์", nameJa:"PBポークスライス（スパムの形状）", unit:'g', par:400, lot:400, price:89, supId:'s06'},
+  {id:'i020', cat:"Japan MARINO", name:"ซึบุตสึยะ อัพ K1", nameJa:"粒つやアップK1（炊飯改良剤）", unit:'g', par:500, lot:500, price:1152, supId:'s02'},
+  {id:'i021', cat:"kobeya(神戸屋)", name:"เกลือทะเล", nameJa:"海塩（シママース）", unit:'g', par:1000, lot:1000, price:95, supId:'s07'},
+  {id:'i022', cat:"kobeya(神戸屋)", name:"ซอสถั่วเหลืองเข้มข้น", nameJa:"濃口醤油", unit:'g', par:18000, lot:18000, price:950, supId:'s07'},
+  {id:'i023', cat:"kobeya(神戸屋)", name:"มิริน", nameJa:"みりん", unit:'g', par:5000, lot:5000, price:365, supId:'s07'},
+  {id:'i024', cat:"kobeya(神戸屋)", name:"สาเกสำหรับทำอาหาร", nameJa:"料理酒", unit:'g', par:18000, lot:18000, price:2400, supId:'s07'},
+  {id:'i025', cat:"Makro PRO", name:"น้ำตาลอ้อยดิบ", nameJa:"きび糖", unit:'g', par:500, lot:500, price:33, supId:'s04'},
+  {id:'i026', cat:"kobeya(神戸屋)", name:"ชิโร ดาชิ สำหรับใช้ในเชิงพาณิชย์", nameJa:"業務用 白だし", unit:'g', par:1500, lot:1500, price:330, supId:'s07'},
+  {id:'i027', cat:"kobeya(神戸屋)", name:"ผงดาชิสาหร่ายคอมบุ", nameJa:"コンソメ　 昆布だし粉", unit:'g', par:1000, lot:1000, price:644, supId:'s07'},
+  {id:'i028', cat:"kobeya(神戸屋)", name:"ผงดาชิปลาโบนิโต", nameJa:"コンソメ　鰹だし粉", unit:'g', par:1000, lot:1000, price:340, supId:'s07'},
+  {id:'i029', cat:"shopee.th", name:"ตัวปรับค่า pH", nameJa:"PH調整剤", unit:'g', par:1000, lot:1000, price:108, supId:'s09'},
+  {id:'i030', cat:"kobeya(神戸屋)", name:"มายองเนส", nameJa:"マヨネーズ", unit:'g', par:1000, lot:1000, price:115, supId:'s07'},
+  {id:'i031', cat:"kobeya(神戸屋)", name:"หลอดเมนไทโกะรสเผ็ด", nameJa:"辛子明太子チューブ", unit:'g', par:500, lot:500, price:395, supId:'s07'},
+  {id:'i032', cat:"kobeya(神戸屋)", name:"ชิ้นส่วนเมนไทโกะ", nameJa:"明太子切子", unit:'g', par:500, lot:500, price:420, supId:'s07'},
+  {id:'i033', cat:"Makro PRO", name:"ชีสคาเมมเบิร์ต", nameJa:"カマンベールチーズ", unit:'g', par:125, lot:125, price:179, supId:'s04'},
+  {id:'i034', cat:"Makro PRO", name:"ชีสแผ่น", nameJa:"スライスチーズ（チェダーチーズ）", unit:'g', par:500, lot:500, price:259, supId:'s04'},
+  {id:'i035', cat:"Makro PRO", name:"ปลาทูน่าบรรจุน้ำมัน", nameJa:"オイル漬けツナ", unit:'g', par:1350, lot:1350, price:265, supId:'s04'},
+  {id:'i036', cat:"Makro PRO", name:"ปลาแซลมอน", nameJa:"鮭", unit:'g', par:1000, lot:1000, price:459, supId:'s04'},
+  {id:'i037', cat:"makotoya(誠屋)", name:"ไข่ปลาแซลมอน", nameJa:"いくら", unit:'g', par:0, lot:1, price:0, supId:'s08'},
+  {id:'i038', cat:"kobeya(神戸屋)", name:"วาซาบิ", nameJa:"ワサビ", unit:'g', par:0, lot:1, price:0, supId:'s07'},
+  {id:'i039', cat:"makotoya(誠屋)", name:"กุ้งปอกเปลือก 41-50 ตัว", nameJa:"むき海老４１－５０", unit:'g', par:1000, lot:1000, price:370, supId:'s08'},
+  {id:'i040', cat:"kobeya(神戸屋)", name:"แป้งเทมปุระ", nameJa:"天ぷら粉", unit:'g', par:1000, lot:1000, price:115, supId:'s07'},
+  {id:'i041', cat:"kobeya(神戸屋)", name:"สาหร่ายคอมบุเค็ม", nameJa:"塩昆布", unit:'g', par:120, lot:120, price:220, supId:'s07'},
+  {id:'i042', cat:"makotoya(誠屋)", name:"พริกชิจิมิสด", nameJa:"生七味", unit:'g', par:0, lot:1, price:0, supId:'s08'},
+  {id:'i043', cat:"kobeya(神戸屋)", name:"พริกชิจิมิ", nameJa:"七味唐辛子", unit:'g', par:300, lot:300, price:149, supId:'s07'},
+  {id:'i044', cat:"kobeya(神戸屋)", name:"ยูซุ", nameJa:"柚子", unit:'g', par:0, lot:1, price:0, supId:'s07'},
+  {id:'i045', cat:"King Marine Foods Co., Ltd", name:"ปลาไหลย่างคาบายากิ", nameJa:"うなぎ蒲焼", unit:'g', par:222, lot:222, price:177, supId:'s03'},
+  {id:'i046', cat:"makotoya(誠屋)", name:"เต้าหู้ทอดห่อ", nameJa:"油揚げ", unit:'g', par:30, lot:30, price:29, supId:'s08'},
+  {id:'i047', cat:"Makro PRO", name:"เกลือ", nameJa:"塩", unit:'g', par:1000, lot:1000, price:16, supId:'s04'},
+  {id:'i048', cat:"kobeya(神戸屋)", name:"เกล็ดปลาโบนิโต", nameJa:"かつお節", unit:'g', par:40, lot:40, price:67, supId:'s07'},
+  {id:'i049', cat:"kobeya(神戸屋)", name:"Tempura Flakes (เท็มปุระเฟลก)", nameJa:"天かす（天ぷらフレーク）", unit:'g', par:60, lot:60, price:35, supId:'s07'},
+  {id:'i050', cat:"Makro PRO", name:"น้ำผึ้ง", nameJa:"はちみつ", unit:'g', par:1000, lot:1000, price:155, supId:'s04'},
+  {id:'i051', cat:"Makro PRO", name:"แป้งข้าวเจ้า", nameJa:"米粉", unit:'g', par:1000, lot:1000, price:33, supId:'s04'},
+  {id:'i052', cat:"Makro PRO", name:"แป้งมันฝรั่ง", nameJa:"片栗粉", unit:'g', par:500, lot:500, price:59, supId:'s04'},
+  {id:'i053', cat:"Makro PRO", name:"แป้งเค้ก", nameJa:"薄力粉", unit:'g', par:1000, lot:1000, price:49, supId:'s04'},
+  {id:'i054', cat:"Makro PRO", name:"น้ำมันงา", nameJa:"ごま油", unit:'g', par:4000, lot:4000, price:690, supId:'s04'},
+  {id:'i055', cat:"kobeya(神戸屋)", name:"ขิงขูด", nameJa:"おろし生姜", unit:'g', par:900, lot:900, price:320, supId:'s07'},
+  {id:'i056', cat:"kobeya(神戸屋)", name:"กระเทียมขูด", nameJa:"おろしニンニク", unit:'g', par:1000, lot:1000, price:270, supId:'s07'},
+  {id:'i057', cat:"Makro PRO", name:"เมล็ดงาขาวคั่ว", nameJa:"炒り白ごま", unit:'g', par:1000, lot:1000, price:153, supId:'s04'},
+  {id:'i058', cat:"Makro PRO", name:"ไข่ปลาบิน", nameJa:"とび子", unit:'g', par:500, lot:500, price:379, supId:'s04'},
+  {id:'i059', cat:"kobeya(神戸屋)", name:"หัวไชเท้าดอง", nameJa:"沢庵", unit:'g', par:500, lot:500, price:65, supId:'s07'},
+  {id:'i060', cat:"makotoya(誠屋)", name:"กุ้งซากุระ", nameJa:"桜えび", unit:'g', par:50, lot:50, price:55, supId:'s08'},
+  {id:'i061', cat:"kobeya(神戸屋)", name:"มิโซะแดง", nameJa:"赤味噌", unit:'g', par:1000, lot:1000, price:89, supId:'s07'},
+  {id:'i062', cat:"kobeya(神戸屋)", name:"ข้าวมิโซะ", nameJa:"白米味噌", unit:'g', par:1000, lot:1000, price:120, supId:'s07'},
+  {id:'i063', cat:"kobeya(神戸屋)", name:"มิโซะขาว", nameJa:"西京味噌", unit:'g', par:500, lot:500, price:115, supId:'s07'},
+  {id:'i064', cat:"Makro PRO", name:"ผงปรุงรสไก่ฟ้าไทย（ฟ้าไทยผงปรุงรสรสไก่）", nameJa:"Fa Thai Chicken Flavour Seasoning", unit:'g', par:800, lot:800, price:86, supId:'s04'},
+  {id:'i065', cat:"Makro PRO", name:"เครื่องปรุงรสเคจัน GABAN", nameJa:"ケイジャンシーズニング", unit:'g', par:75, lot:75, price:89, supId:'s04'},
+  {id:'i066', cat:"Makro PRO", name:"ผงออริกาโน", nameJa:"オレガノパウダー", unit:'g', par:100, lot:100, price:110, supId:'s04'},
+  {id:'i067', cat:"Makro PRO", name:"ผงใบโหระพาแห้ง", nameJa:"乾燥バジル　パウダー", unit:'g', par:100, lot:100, price:68, supId:'s04'},
+  {id:'i068', cat:"Makro PRO", name:"ผงโรสแมรี่", nameJa:"ローズマリー パウダー", unit:'g', par:1000, lot:1000, price:241, supId:'s04'},
+  {id:'i069', cat:"Makro PRO", name:"ซอสหอยนางรม", nameJa:"オイスターソース", unit:'g', par:2500, lot:2500, price:194, supId:'s04'},
+  {id:'i070', cat:"Makro PRO", name:"น้ำมันสลัด", nameJa:"サラダ油", unit:'g', par:18000, lot:18000, price:925, supId:'s04'},
+  {id:'i071', cat:"Makro PRO", name:"ไข่", nameJa:"玉子", unit:'g', par:1500, lot:1500, price:130, supId:'s04'},
+  {id:'i072', cat:"King Marine Foods Co., Ltd", name:"เศษปลาไหล", nameJa:"鰻　端材", unit:'g', par:500, lot:500, price:182, supId:'s03'},
+  {id:'i073', cat:"Makro PRO", name:"พริกไทยขาว", nameJa:"ホワイトペッパー", unit:'g', par:500, lot:500, price:269, supId:'s04'},
+  {id:'i074', cat:"Makro PRO", name:"ไข่เหลว (สำหรับทามาโกะยากิ)", nameJa:"卵液、全卵（玉子焼き用）", unit:'g', par:2000, lot:2000, price:177, supId:'s04'},
+  {id:'i075', cat:"Makro PRO", name:"ไข่แดงเหลว (สำหรับทามาโกะยากิ)", nameJa:"卵液、卵黄（玉子焼き用）", unit:'g', par:2000, lot:2000, price:370, supId:'s04'},
+  {id:'i076', cat:"Makro PRO", name:"ปลาเนื้อขาวไร้ก้าง (เช่น ปลาดุก ปลากะพงขาว ปลานิล ฯลฯ)", nameJa:"骨なし　白身魚（鯰、鱸、ティラピアなど）", unit:'g', par:800, lot:800, price:88, supId:'s04'},
+  {id:'i077', cat:"Makro PRO", name:"หอยลายแช่แข็งปอกเปลือก", nameJa:"冷凍むきアサリ", unit:'g', par:800, lot:800, price:95, supId:'s04'},
+  {id:'i078', cat:"kobeya(神戸屋)", name:"ผักกาดดอง (Takana)", nameJa:"スパイシー高菜（漬物）", unit:'g', par:500, lot:500, price:172, supId:'s07'}
+];
+
+let state = {
+  store:'สาขาหลัก', currency:'฿', lang:'both', sheetUrl:'', lastSent:'',
+  suppliers: SAMPLE_SUPS.map(o => ({...o, closed:[...o.closed], holidays:[]})),
+  items: SAMPLE_ITEMS.map(o => ({...o})),
+  units: [...DEFAULT_UNITS],
+  counts:{}, prev:{}, groupBy:'sup', supFilter:null
+};
+let view = 'count';
+
+let saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => { try{ await window.storage.set(KEY, JSON.stringify(state)); }catch(e){} }, 400);
+}
+async function load(){
+  try{
+    const r = await window.storage.get(KEY);
+    if(r && r.value){
+      const d = JSON.parse(r.value);
+      if(d && Array.isArray(d.items)) state = Object.assign(state, d);
+    }
+  }catch(e){}
+  if(!Array.isArray(state.suppliers)) state.suppliers = [];
+  state.suppliers.forEach(s => { if(!Array.isArray(s.closed)) s.closed = []; if(!Array.isArray(s.holidays)) s.holidays = []; });
+  if(!state.prev) state.prev = {};
+  if(!Array.isArray(state.units) || !state.units.length) state.units = [...DEFAULT_UNITS];
+}
+
+/* ---------- 営業日判定 ---------- */
+const supOf = it => state.suppliers.find(s => s.id === it.supId) || null;
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const wd = i => state.lang === 'ja' ? WD_JA[i] : (state.lang === 'th' ? WD_TH[i] : WD_TH[i]);
+function isClosed(sup, d){ return sup ? ((sup.closed||[]).includes(d.getDay()) || (sup.holidays||[]).includes(ymd(d))) : false; }
+function pastCutoff(sup, d){
+  if(!sup || !sup.cutoff) return false;
+  const now = new Date();
+  if(ymd(d) !== ymd(now)) return false;
+  const [h,m] = sup.cutoff.split(':').map(Number);
+  return now.getHours()*60 + now.getMinutes() >= h*60 + (m||0);
+}
+const canOrderToday = sup => { const t = new Date(); return !isClosed(sup,t) && !pastCutoff(sup,t); };
+function nextOrderDate(sup){
+  const d = new Date();
+  for(let i=0;i<60;i++){
+    const c = new Date(d.getFullYear(), d.getMonth(), d.getDate()+i);
+    if(!isClosed(sup,c) && !pastCutoff(sup,c)) return c;
+  }
+  return null;
+}
+function closedReason(sup){
+  const t = new Date();
+  if((sup.holidays||[]).includes(ymd(t))) return state.lang==='ja' ? '本日は臨時休業' : 'วันนี้หยุดพิเศษ';
+  if((sup.closed||[]).includes(t.getDay())) return state.lang==='ja' ? `${WD_JA[t.getDay()]}曜は定休` : `วัน${WD_TH[t.getDay()]}หยุดประจำ`;
+  if(pastCutoff(sup,t)) return state.lang==='ja' ? `本日${sup.cutoff}の締切を過ぎています` : `เลยเวลาปิดรับ ${sup.cutoff} แล้ว`;
+  return '';
+}
+const restLabel = sup => {
+  const c = (sup.closed||[]).map(i => wd(i));
+  return c.length ? (state.lang==='ja' ? c.join('・')+'休' : 'หยุด '+c.join(',')) : '';
+};
+const dateLabel = d => d ? `${d.getDate()}/${d.getMonth()+1}(${wd(d.getDay())})` : '—';
+
+/* ---------- 計算 ---------- */
+const num = v => (v === '' || v === null || v === undefined || isNaN(v)) ? null : Number(v);
+const round2 = n => Math.round(n*100)/100;
+function orderQty(item){
+  const c = num(state.counts[item.id]);
+  if(c === null) return null;
+  const short = round2(Number(item.par) - c);
+  if(short <= 0) return 0;
+  const lot = Number(item.lot) > 0 ? Number(item.lot) : 1;
+  return round2(Math.ceil((short - 1e-9)/lot)*lot);
+}
+const money = n => state.currency + Math.round(n).toLocaleString('en-US');
+const fmt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits:2});
+const visibleItems = () => state.supFilter ? state.items.filter(i => i.supId === state.supFilter) : state.items;
+function usedQty(item){
+  const p = state.prev[item.id];
+  const c = num(state.counts[item.id]);
+  if(!p || c === null) return null;
+  const u = round2(Number(p.stock) + Number(p.order || 0) - c);
+  return u < 0 ? 0 : u;
+}
+function summary(){
+  let need=0, amount=0, blank=0;
+  for(const it of visibleItems()){
+    const q = orderQty(it);
+    if(q === null){ blank++; continue; }
+    if(q > 0){ need++; amount += q*Number(it.price||0); }
+  }
+  const list = visibleItems();
+  return {need, amount, blank, counted:list.length - blank, total:list.length};
+}
+const nm = o => `<span class="th">${esc(o.name)}</span><span class="ja">${esc(o.nameJa || '')}</span>`;
+
+/* ---------- フィルター ---------- */
+function filterBar(){
+  if(state.suppliers.length < 2) return '';
+  let h = `<div class="filter"><button data-sf="" aria-pressed="${!state.supFilter}">${pick('all')}</button>`;
+  for(const s of state.suppliers){
+    const r = restLabel(s);
+    const label = state.lang === 'ja' ? (s.nameJa || s.name) : s.name;
+    h += `<button data-sf="${s.id}" aria-pressed="${state.supFilter === s.id}">${esc(label)}${r ? `<span class="rest">${esc(r)}</span>` : ''}</button>`;
+  }
+  return h + '</div>';
+}
+function bindFilter(){
+  app.querySelectorAll('[data-sf]').forEach(b => { b.onclick = () => { state.supFilter = b.dataset.sf || null; save(); go(view); }; });
+}
+
+/* ============ 在庫を数える ============ */
+function renderCount(){
+  const list = visibleItems();
+  let html = filterBar() + `<p class="hint">${pick('hintCount')}</p>`;
+  if(!list.length){
+    app.innerHTML = html + `<div class="empty">${pick('noItems')}</div>`;
+    bindFilter(); bar.hidden = true; return;
+  }
+  const keys = state.groupBy === 'sup'
+    ? [...new Set(list.map(i => i.supId || ''))]
+    : [...new Set(list.map(i => i.cat || '-'))];
+
+  for(const k of keys){
+    const rows = state.groupBy === 'sup' ? list.filter(i => (i.supId||'') === k) : list.filter(i => (i.cat||'-') === k);
+    let head;
+    if(state.groupBy === 'sup'){
+      const s = state.suppliers.find(x => x.id === k);
+      if(s){
+        const ok = canOrderToday(s);
+        head = `<div class="ghead"><h2>${nm(s)}</h2>
+          <span class="state ${ok?'open':'shut'}">${pick(ok?'canOrder':'cannotOrder')}</span>
+          <span class="next">${ok ? (s.cutoff ? L.cutoffAt[state.lang==='ja'?1:0]+esc(s.cutoff) : '') : L.nextIs[state.lang==='ja'?1:0]+dateLabel(nextOrderDate(s))}</span></div>`;
+      } else head = `<div class="ghead"><h2>${pick('noSupplier')}</h2></div>`;
+    } else head = `<div class="ghead"><h2>${esc(k)}</h2></div>`;
+
+    html += `<section class="group">${head}<div class="rows">`;
+    for(const it of rows){
+      const c = state.counts[it.id];
+      const q = orderQty(it);
+      let flag = `<div class="flag none">${pick('notFilled')}</div>`;
+      if(q !== null) flag = q > 0
+        ? `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${fmt(q)} ${esc(it.unit)}</div>`
+        : `<div class="flag ok">${pick('enough')}</div>`;
+      const s = supOf(it);
+      const sub = state.groupBy === 'sup'
+        ? `${L.parIs[state.lang==='ja'?1:0]}${fmt(it.par)} ${esc(it.unit)}・${esc(it.cat||'')}`
+        : `${L.parIs[state.lang==='ja'?1:0]}${fmt(it.par)} ${esc(it.unit)}・${esc(s ? (state.lang==='ja' ? (s.nameJa||s.name) : s.name) : '')}`;
+      html += `<div class="row">
+        <div class="info"><div class="nm">${nm(it)}</div><div class="meta num">${sub}</div>${flag}</div>
+        <div class="stepper">
+          <button type="button" data-step="-1" data-id="${it.id}" aria-label="-">−</button>
+          <input type="number" inputmode="decimal" step="any" min="0" placeholder="—" value="${c===undefined||c===''?'':c}" data-count="${it.id}" aria-label="${esc(it.name)}">
+          <button type="button" data-step="1" data-id="${it.id}" aria-label="+">＋</button>
+        </div></div>`;
+    }
+    html += '</div></section>';
+  }
+  app.innerHTML = html;
+  bindFilter();
+  const s = summary();
+  bar.hidden = false;
+  bar.innerHTML = `<div class="sum"><b class="num">${s.counted} / ${s.total}${L.filled[state.lang==='ja'?1:0]}</b>${s.need}${L.shortN[state.lang==='ja'?1:0]}${money(s.amount)}</div>
+    <button class="go" id="toResult" ${s.counted?'':'disabled'}>${two('toResult')}</button>`;
+  const b = document.getElementById('toResult');
+  if(b) b.onclick = () => go('result');
+}
+
+/* ============ 発注リスト ============ */
+function renderResult(){
+  const s = summary();
+  const rows = visibleItems().map(it => ({it, q:orderQty(it)})).filter(r => r.q > 0);
+  let html = filterBar();
+
+  if(!rows.length){
+    app.innerHTML = html + `<div class="empty">${pick(s.counted ? 'noOrder' : 'countFirst')}</div>` + sheetBox();
+    bindFilter(); bindSheet();
+    bar.hidden = false;
+    bar.innerHTML = `<div class="sum">—</div><button class="go" id="back">${two('backCount')}</button>`;
+    document.getElementById('back').onclick = () => go('count');
+    return;
+  }
+  if(s.blank) html += `<div class="warn">${pick('blankWarn').replace(/%n/g, s.blank)}</div>`;
+
+  const groups = [...new Set(rows.map(r => r.it.supId || ''))].map(id => {
+    const sup = state.suppliers.find(x => x.id === id) || null;
+    const list = rows.filter(r => (r.it.supId||'') === id);
+    return {sup, list, ok: sup ? canOrderToday(sup) : true, sum:list.reduce((a,r) => a + r.q*Number(r.it.price||0), 0)};
+  });
+  groups.sort((a,b) => b.ok - a.ok);
+  let todaySum = 0, laterSum = 0, shownLater = false;
+  groups.forEach(g => { if(g.ok) todaySum += g.sum; else laterSum += g.sum; });
+  const anyToday = groups.some(g => g.ok);
+
+  groups.forEach((g, gi) => {
+    if(anyToday && gi === 0) html += `<p class="secttl">${pick('orderToday')}</p>`;
+    if(!g.ok && !shownLater){ shownLater = true; html += `<p class="secttl">${pick('orderLater')}</p>`; }
+    const url = g.sup ? (g.sup.url || '') : '';
+    html += `<article class="slip ${g.ok?'':'shut'}">
+      <div class="sup"><h3>${g.sup ? nm(g.sup) : pick('noSupplier')}</h3><span class="cnt num">${g.list.length}${L.items[state.lang==='ja'?1:0]}</span>
+      ${g.ok ? '' : `<div class="closed">${esc(closedReason(g.sup))} → ${L.nextOrderDay[state.lang==='ja'?1:0]}${dateLabel(nextOrderDate(g.sup))}</div>`}</div>`;
+    for(const r of g.list){
+      const c = num(state.counts[r.it.id]);
+      html += `<div class="line">
+        <div class="n">${nm(r.it)}<div class="sub num">${L.stock[state.lang==='ja'?1:0]}${fmt(c)} / ${L.parIs[state.lang==='ja'?1:0]}${fmt(r.it.par)} ${esc(r.it.unit)}</div></div>
+        <div class="q num">${fmt(r.q)} ${esc(r.it.unit)}</div>
+        <div class="p num">${money(r.q*Number(r.it.price||0))}</div></div>`;
+    }
+    html += `<div class="foot"><span class="lbl">${pick('subtotal')}</span><span class="amt">${money(g.sum)}</span></div>
+      <div class="acts">
+        <a href="${esc(url)}" target="_blank" rel="noopener" ${url?'':'aria-disabled="true"'}>${two(url?'openSite':'noUrl')}</a>
+        <button type="button" data-copy="${gi}">${two('copyOrder')}</button>
+      </div></article>`;
+  });
+
+  html += `<div class="total"><span class="lbl">${pick('todayTotal')}</span><span class="amt">${money(todaySum)}</span></div>`;
+  if(laterSum) html += `<p class="note">${pick('laterTotal')}：${money(laterSum)}（${money(todaySum+laterSum)}）</p>`;
+  html += `<p class="note">${pick('priceNote')}</p>` + sheetBox();
+
+  app.innerHTML = html;
+  bindFilter(); bindSheet();
+  app.querySelectorAll('[data-copy]').forEach(b => {
+    b.onclick = () => {
+      const g = groups[Number(b.dataset.copy)];
+      const name = g.sup ? `${g.sup.name}${g.sup.nameJa ? ' / '+g.sup.nameJa : ''}` : '-';
+      copy([
+        `【สั่งซื้อ / 発注】${name}`,
+        `${state.store}  ${dateStr()}`,
+        ...g.list.map(r => `・${r.it.name}${r.it.nameJa ? ' ('+r.it.nameJa+')' : ''}  ${fmt(r.q)} ${r.it.unit}`),
+        `${L.subtotal[0]} ${money(g.sum)}`,
+        g.ok ? '' : `※${closedReason(g.sup)} → ${dateLabel(nextOrderDate(g.sup))}`
+      ].filter(Boolean).join('\n'));
+    };
+  });
+  bar.hidden = false;
+  bar.innerHTML = `<div class="sum"><b class="num">${rows.length}${L.items[state.lang==='ja'?1:0]}・${money(todaySum+laterSum)}</b>${groups.length} ${L.supplier[state.lang==='ja'?1:0]}</div>
+    <button class="go" id="back">${two('backCount')}</button>`;
+  document.getElementById('back').onclick = () => go('count');
+}
+
+/* ---------- シート送信 ---------- */
+function sheetBox(){
+  return `<div class="sheetbox">
+    <h4>${two('sheetTitle')}</h4>
+    <p>${pick('sheetDesc')}${state.lastSent ? `<br>${L.lastSent[state.lang==='ja'?1:0]}${esc(state.lastSent)}` : ''}</p>
+    <div class="brow">
+      <button type="button" id="sheetSend">${pick('sheetSend')}</button>
+      <button type="button" class="alt" id="sheetCsv">${pick('sheetCsv')}</button>
+    </div></div>`;
+}
+function buildRows(){
+  const d = new Date();
+  return state.items.filter(it => num(state.counts[it.id]) !== null).map(it => {
+    const s = supOf(it);
+    const q = orderQty(it) || 0;
+    const u = usedQty(it);
+    const p = state.prev[it.id];
+    return {
+      date: ymd(d), time: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,
+      store: state.store,
+      supplierId: s ? s.id : '', supplier: s ? s.name : '', supplierJa: s ? (s.nameJa||'') : '',
+      itemId: it.id, item: it.name, itemJa: it.nameJa || '', unit: it.unit, category: it.cat || '',
+      prevStock: p ? p.stock : '', received: p ? (p.order || 0) : '',
+      stock: num(state.counts[it.id]), used: u === null ? '' : u,
+      par: it.par, order: q, price: it.price, amount: round2(q*Number(it.price||0)), currency: state.currency
+    };
+  });
+}
+function snapshot(){
+  const d = new Date();
+  for(const it of state.items){
+    const c = num(state.counts[it.id]);
+    if(c === null) continue;
+    state.prev[it.id] = {stock:c, order:orderQty(it) || 0, date:ymd(d)};
+  }
+  state.lastSent = `${ymd(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  save();
+}
+function bindSheet(){
+  const sendBtn = document.getElementById('sheetSend');
+  const csvBtn = document.getElementById('sheetCsv');
+  if(csvBtn) csvBtn.onclick = () => {
+    const rows = buildRows();
+    if(!rows.length) return;
+    const head = Object.keys(rows[0]);
+    copy([head.join(','), ...rows.map(r => head.map(h => String(r[h] ?? '')).join(','))].join('\n'));
+  };
+  if(sendBtn) sendBtn.onclick = async () => {
+    if(!state.sheetUrl){ toast(pick('sheetNoUrl')); return; }
+    const rows = buildRows();
+    if(!rows.length) return;
+    sendBtn.disabled = true; sendBtn.textContent = pick('sheetSending');
+    const payload = JSON.stringify({store:state.store, rows});
+    let ok = false;
+    try{
+      const res = await fetch(state.sheetUrl, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:payload});
+      ok = res.ok;
+    }catch(e){
+      try{ await fetch(state.sheetUrl, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:payload}); ok = true; }
+      catch(e2){ ok = false; }
+    }
+    if(ok){ snapshot(); toast(pick('sheetOk')); } else { toast(pick('sheetErr')); }
+    sendBtn.disabled = false; sendBtn.textContent = pick('sheetSend');
+  };
+}
+
+/* ============ 設定 ============ */
+function renderMaster(){
+  let html = `<div class="setrow">
+    <label class="wide">${two('fStore')}<input id="setStore" value="${esc(state.store)}"></label>
+    <label>${two('fCur')}<select id="setCur">
+      <option value="฿" ${state.currency==='฿'?'selected':''}>บาท (฿)</option>
+      <option value="¥" ${state.currency==='¥'?'selected':''}>円 (¥)</option>
+      <option value="$" ${state.currency==='$'?'selected':''}>USD ($)</option>
+    </select></label>
+    <label>${two('fLang')}<select id="setLang">
+      <option value="both" ${state.lang==='both'?'selected':''}>ไทย + 日本語</option>
+      <option value="th" ${state.lang==='th'?'selected':''}>ไทย</option>
+      <option value="ja" ${state.lang==='ja'?'selected':''}>日本語</option>
+    </select></label>
+    <label class="wide">${two('fGroup')}<select id="setGroup">
+      <option value="sup" ${state.groupBy==='sup'?'selected':''}>${one('bySup')}</option>
+      <option value="cat" ${state.groupBy==='cat'?'selected':''}>${one('byCat')}</option>
+    </select></label>
+    <label class="wide">${two('fSheetUrl')}<input type="url" inputmode="url" placeholder="https://script.google.com/macros/s/..." id="setSheet" value="${esc(state.sheetUrl||'')}"></label>
+    <p class="cap">${pick('sheetCap')}</p>
+  </div>`;
+
+  html += `<p class="secttl">${one('unitSect')}</p>
+    <div class="holchips">${(state.units||[]).map(u => `<button type="button" data-unitdel="${esc(u)}">${esc(u)}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
+    <div class="add"><input type="text" id="newUnitInput" placeholder="${pick('newUnit')}"><button type="button" id="addUnitBtn">${pick('addBtn')}</button></div>`;
+
+  html += `<p class="secttl">${one('supSect')}</p>`;
+  for(const s of state.suppliers){
+    html += `<details class="mcard">
+      <summary><span class="nmwrap">${nm(s)}</span><span class="s">${esc(restLabel(s) || pick('noClosed'))}${s.cutoff ? ' / '+esc(s.cutoff) : ''}<br>${L.nextOrderDay[state.lang==='ja'?1:0]}${dateLabel(nextOrderDate(s))}</span></summary>
+      <div class="fields">
+        <label class="wide">${two('fSupName')} (TH)<input data-sf2="name" data-id="${s.id}" value="${esc(s.name)}"></label>
+        <label class="wide">${two('fSupName')} (JA)<input data-sf2="nameJa" data-id="${s.id}" value="${esc(s.nameJa||'')}"></label>
+        <label class="wide">${two('fUrl')}<input type="url" inputmode="url" placeholder="https://" data-sf2="url" data-id="${s.id}" value="${esc(s.url||'')}"></label>
+        <label class="wide">${two('fPhone')}<input data-sf2="phone" data-id="${s.id}" value="${esc(s.phone||'')}"></label>
+        <label class="wide">${two('fEmail')}<input type="email" data-sf2="email" data-id="${s.id}" value="${esc(s.email||'')}"></label>
+        <label class="wide">${two('fNote')}<input data-sf2="note" data-id="${s.id}" value="${esc(s.note||'')}"></label>
+        <div class="days"><span class="cap">${one('fClosed')}</span><div class="dd">
+          ${WD_TH.map((w,i) => `<button type="button" data-day="${i}" data-id="${s.id}" aria-pressed="${(s.closed||[]).includes(i)}">${state.lang==='ja'?WD_JA[i]:w}</button>`).join('')}
+        </div></div>
+        <label class="wide">${two('fCutoff')}<input type="time" data-sf2="cutoff" data-id="${s.id}" value="${esc(s.cutoff||'')}"></label>
+        <div class="hol"><span class="cap">${one('fHoliday')}</span>
+          <div class="add"><input type="date" data-hol="${s.id}"><button type="button" data-holadd="${s.id}">${pick('addBtn')}</button></div>
+          <div class="holchips">${(s.holidays||[]).slice().sort().map(h => `<button type="button" data-holdel="${s.id}" data-d="${h}">${esc(h)}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
+        </div>
+        <button class="del" data-supdel="${s.id}">${one('delSup')}</button>
+      </div></details>`;
+  }
+  html += `<button class="addbtn" id="addSup">${one('addSup')}</button>`;
+
+  html += `<p class="secttl">${one('itemSect')}</p>`;
+  for(const it of state.items){
+    const s = supOf(it);
+    html += `<details class="mcard">
+      <summary><span class="nmwrap">${nm(it)}</span><span class="s num">${esc(s ? s.name : '—')}<br>${fmt(it.par)} ${esc(it.unit)}</span></summary>
+      <div class="fields">
+        <label class="wide">${two('fName')}<input data-f="name" data-id="${it.id}" value="${esc(it.name)}"></label>
+        <label class="wide">${two('fNameJa')}<input data-f="nameJa" data-id="${it.id}" value="${esc(it.nameJa||'')}"></label>
+        <label class="wide">${two('supplier')}<select data-f="supId" data-id="${it.id}">
+          <option value="">—</option>
+          ${state.suppliers.map(x => `<option value="${x.id}" ${x.id===it.supId?'selected':''}>${esc(x.name)}</option>`).join('')}
+        </select></label>
+        <label>${two('fCat')}<input data-f="cat" data-id="${it.id}" value="${esc(it.cat||'')}"></label>
+        <label>${two('fUnit')}<select data-f="unit" data-id="${it.id}">
+          ${Array.from(new Set([...(state.units||[]), it.unit].filter(Boolean))).map(u => `<option value="${esc(u)}" ${u===it.unit?'selected':''}>${esc(u)}</option>`).join('')}
+        </select></label>
+        <label>${two('fPar')}<input type="number" step="any" inputmode="decimal" data-f="par" data-id="${it.id}" value="${it.par}"></label>
+        <label>${two('fLot')}<input type="number" step="any" inputmode="decimal" data-f="lot" data-id="${it.id}" value="${it.lot}"></label>
+        <label class="wide">${two('fPrice')} (${esc(state.currency)})<input type="number" step="any" inputmode="decimal" data-f="price" data-id="${it.id}" value="${it.price}"></label>
+        <button class="del" data-del="${it.id}">${one('delItem')}</button>
+      </div></details>`;
+  }
+  html += `<button class="addbtn" id="addItem">${one('addItem')}</button>
+    <button class="danger" id="resetAll">${one('resetAll')}</button>`;
+
+  app.innerHTML = html;
+  bar.hidden = true;
+
+  document.getElementById('setStore').oninput = e => { state.store = e.target.value; storeTitle.textContent = state.store || 'นับสต๊อก'; save(); };
+  document.getElementById('setCur').onchange = e => { state.currency = e.target.value; save(); renderMaster(); };
+  document.getElementById('setLang').onchange = e => { state.lang = e.target.value; applyLang(); save(); renderMaster(); };
+  document.getElementById('setGroup').onchange = e => { state.groupBy = e.target.value; save(); };
+  document.getElementById('setSheet').oninput = e => { state.sheetUrl = e.target.value.trim(); save(); };
+
+  app.querySelectorAll('[data-sf2]').forEach(el => {
+    el.oninput = () => { const s = state.suppliers.find(x => x.id === el.dataset.id); if(s){ s[el.dataset.sf2] = el.value; save(); } };
+  });
+  app.querySelectorAll('[data-day]').forEach(b => {
+    b.onclick = () => {
+      const s = state.suppliers.find(x => x.id === b.dataset.id);
+      const d = Number(b.dataset.day);
+      s.closed = (s.closed||[]).includes(d) ? s.closed.filter(x => x !== d) : [...(s.closed||[]), d].sort();
+      b.setAttribute('aria-pressed', String(s.closed.includes(d)));
+      save();
+      const sm = b.closest('details').querySelector('.s');
+      sm.innerHTML = `${esc(restLabel(s) || pick('noClosed'))}${s.cutoff ? ' / '+esc(s.cutoff) : ''}<br>${L.nextOrderDay[state.lang==='ja'?1:0]}${dateLabel(nextOrderDate(s))}`;
+    };
+  });
+  app.querySelectorAll('[data-holadd]').forEach(b => {
+    b.onclick = () => {
+      const s = state.suppliers.find(x => x.id === b.dataset.holadd);
+      const inp = app.querySelector(`[data-hol="${s.id}"]`);
+      if(!inp.value) return;
+      if(!s.holidays.includes(inp.value)) s.holidays.push(inp.value);
+      save(); reopenMaster(s.id);
+    };
+  });
+  app.querySelectorAll('[data-holdel]').forEach(b => {
+    b.onclick = () => {
+      const s = state.suppliers.find(x => x.id === b.dataset.holdel);
+      s.holidays = s.holidays.filter(d => d !== b.dataset.d);
+      save(); reopenMaster(s.id);
+    };
+  });
+  app.querySelectorAll('[data-supdel]').forEach(b => {
+    b.onclick = () => {
+      const s = state.suppliers.find(x => x.id === b.dataset.supdel);
+      const n = state.items.filter(i => i.supId === s.id).length;
+      if(!confirm(`${s.name} — ${n} ${L.items[0]}?`)) return;
+      state.items.forEach(i => { if(i.supId === s.id) i.supId = ''; });
+      state.suppliers = state.suppliers.filter(x => x.id !== s.id);
+      if(state.supFilter === s.id) state.supFilter = null;
+      save(); renderMaster();
+    };
+  });
+  document.getElementById('addSup').onclick = () => {
+    const id = 's' + Date.now().toString(36);
+    state.suppliers.push({id, name:'ซัพพลายเออร์ใหม่', nameJa:'新しい仕入先', url:'', phone:'', email:'', note:'', closed:[0], holidays:[], cutoff:''});
+    save(); reopenMaster(id, true);
+  };
+  document.getElementById('addUnitBtn').onclick = () => {
+    const inp = document.getElementById('newUnitInput');
+    const v = (inp.value || '').trim();
+    if(!v) return;
+    if(!state.units.includes(v)) state.units.push(v);
+    save(); renderMaster();
+  };
+  app.querySelectorAll('[data-unitdel]').forEach(b => {
+    b.onclick = () => {
+      state.units = (state.units||[]).filter(u => u !== b.dataset.unitdel);
+      save(); renderMaster();
+    };
+  });
+  app.querySelectorAll('[data-f]').forEach(el => {
+    const h = () => {
+      const it = state.items.find(x => x.id === el.dataset.id);
+      if(!it) return;
+      const f = el.dataset.f;
+      it[f] = ['par','lot','price'].includes(f) ? (el.value === '' ? 0 : Number(el.value)) : el.value;
+      save();
+    };
+    el.oninput = h; el.onchange = h;
+  });
+  app.querySelectorAll('[data-del]').forEach(b => {
+    b.onclick = () => {
+      if(!confirm(pick('confirmDelItem'))) return;
+      state.items = state.items.filter(x => x.id !== b.dataset.del);
+      delete state.counts[b.dataset.del]; delete state.prev[b.dataset.del];
+      save(); renderMaster();
+    };
+  });
+  document.getElementById('addItem').onclick = () => {
+    const id = 'i' + Date.now().toString(36);
+    const sid = state.supFilter || (state.suppliers[0]||{}).id || '';
+    const sup = state.suppliers.find(x => x.id === sid);
+    state.items.push({id, cat: sup ? sup.name : '', name:'รายการใหม่', nameJa:'新しい品目', unit:(state.units||['g'])[0], par:1, lot:1, price:0, supId: sid});
+    save(); renderMaster();
+    const cards = app.querySelectorAll('.mcard');
+    const el = cards[cards.length-1];
+    el.open = true; el.scrollIntoView({block:'center'}); el.querySelector('input').select();
+  };
+  document.getElementById('resetAll').onclick = () => {
+    if(!confirm(pick('confirmReset'))) return;
+    state.counts = {}; save(); toast(pick('resetDone'));
+  };
+}
+function reopenMaster(supId, focus){
+  renderMaster();
+  const el = [...app.querySelectorAll('.mcard')].find(c => c.querySelector(`[data-id="${supId}"]`));
+  if(el){ el.open = true; el.scrollIntoView({block:'center'}); if(focus) el.querySelector('input').select(); }
+}
+
+/* ---------- 共通 ---------- */
+const app = document.getElementById('app');
+const bar = document.getElementById('bar');
+const storeTitle = document.getElementById('storeTitle');
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function dateStr(){ const d = new Date(); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()} (${wd(d.getDay())})`; }
+function applyLang(){ document.body.className = state.lang === 'both' ? '' : 'lang-' + state.lang; }
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 2200);
+}
+function copy(text){
+  const done = () => toast(pick('copied'));
+  if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(text).then(done).catch(fallback); }
+  else fallback();
+  function fallback(){
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); done(); }catch(e){ toast(pick('copyFail')); }
+    ta.remove();
+  }
+}
+function go(v){
+  view = v;
+  document.querySelectorAll('[data-nav]').forEach(b => b.setAttribute('aria-current', String(b.dataset.nav === v)));
+  window.scrollTo(0,0);
+  if(v === 'count') renderCount(); else if(v === 'result') renderResult(); else renderMaster();
+}
+app.addEventListener('input', e => {
+  const t = e.target;
+  if(!t.dataset.count) return;
+  state.counts[t.dataset.count] = t.value === '' ? '' : t.value;
+  save(); updateRow(t);
+});
+app.addEventListener('click', e => {
+  const b = e.target.closest('[data-step]');
+  if(!b) return;
+  const input = app.querySelector(`[data-count="${b.dataset.id}"]`);
+  const next = Math.max(0, round2((num(input.value) ?? 0) + Number(b.dataset.step)));
+  input.value = next; state.counts[b.dataset.id] = String(next);
+  save(); updateRow(input);
+});
+function updateRow(input){
+  const it = state.items.find(x => x.id === input.dataset.count);
+  const q = orderQty(it);
+  const flag = input.closest('.row').querySelector('.flag');
+  if(q === null){ flag.className='flag none'; flag.textContent = pick('notFilled'); }
+  else if(q > 0){ flag.className='flag need'; flag.textContent = `${L.orderN[state.lang==='ja'?1:0]}${fmt(q)} ${it.unit}`; }
+  else { flag.className='flag ok'; flag.textContent = pick('enough'); }
+  const s = summary();
+  const sum = bar.querySelector('.sum');
+  if(sum) sum.innerHTML = `<b class="num">${s.counted} / ${s.total}${L.filled[state.lang==='ja'?1:0]}</b>${s.need}${L.shortN[state.lang==='ja'?1:0]}${money(s.amount)}`;
+  const g = document.getElementById('toResult');
+  if(g) g.disabled = !s.counted;
+}
+document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => go(b.dataset.nav));
+(async function init(){
+  await load();
+  applyLang();
+  document.getElementById('today').textContent = dateStr();
+  storeTitle.textContent = state.store || 'นับสต๊อก';
+  go('count');
+})();
+</script>
