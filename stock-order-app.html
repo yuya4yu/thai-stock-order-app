@@ -100,6 +100,8 @@
   .acts a .ja{color:#B9BEB4}
   .acts a[aria-disabled="true"]{background:#DDE0D9;color:#8C9289;border-color:var(--line);pointer-events:none}
   .acts button{background:transparent;color:var(--nori)}
+  .acts button.solo{background:var(--nori);color:#F2F3EF}
+  .acts button.solo .ja{color:#B9BEB4}
   .secttl{margin:2px 2px 9px;font-size:12px;font-weight:700;color:var(--muted)}
   .total{display:flex;align-items:center;padding:14px 4px 4px;border-top:2px solid var(--ink);margin-top:4px}
   .total .lbl{font-size:13.5px;font-weight:700}
@@ -698,8 +700,8 @@ function renderResult(){
     }
     html += `<div class="foot"><span class="lbl">${pick('subtotal')}</span><span class="amt">${money(g.sum)}</span></div>
       <div class="acts">
-        <a href="${esc(url)}" target="_blank" rel="noopener" ${url?'':'aria-disabled="true"'}>${two(url?'openSite':'noUrl')}</a>
-        <button type="button" data-copy="${gi}">${two('copyOrder')}</button>
+        ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${two('openSite')}</a>` : ''}
+        <button type="button" class="${url ? '' : 'solo'}" data-copy="${gi}">${two('copyOrder')}</button>
       </div></article>`;
   });
 
