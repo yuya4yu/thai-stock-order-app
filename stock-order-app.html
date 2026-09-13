@@ -347,6 +347,7 @@ const L = {
   recDescLocal:['บันทึกลงเครื่องนี้ หน้ารับของและการแนะนำสต๊อกจะใช้ข้อมูลนี้','この端末に記録します。納品画面と自動提案はこの記録をもとに動きます'],
   recHintSheet:['ยังไม่ได้เชื่อมสเปรดชีต เชื่อมได้ที่หน้าตั้งค่า เพื่อเก็บประวัติไว้นอกเครื่อง','スプレッドシート未接続。設定画面で繋ぐと、端末の外にも履歴が残ります'],
   recSaving:['กำลังบันทึก…','記録中…'],
+  recDone:['บันทึกแล้ว','記録済み'],
   recOkLocal:['บันทึกแล้ว เมื่อของมาถึงให้ไปที่หน้ารับของ','記録しました。納品が届いたら「納品」画面で数量を入力してください'],
   recOkSheet:['บันทึกลงเครื่องและชีตแล้ว','端末とシートに記録しました'],
   recOkOffline:['บันทึกลงเครื่องแล้ว แต่ส่งขึ้นชีตไม่สำเร็จ ส่งใหม่ได้ภายหลัง','端末に記録しました。シートへの送信は失敗したので、あとで再送できます'],
@@ -873,7 +874,7 @@ function sheetBox(){
       <div class="brow"><button type="button" class="alt" id="obSend">${pick('outboxSend')}</button>
       <button type="button" class="alt" id="obDrop">${pick('outboxDrop')}</button></div>` : ''}
     <div class="brow">
-      <button type="button" id="sheetSend">${pick('recTitle')}</button>
+      <button type="button" id="sheetSend" ${alreadyRecorded() ? 'disabled' : ''}>${pick(alreadyRecorded() ? 'recDone' : 'recTitle')}</button>
       <button type="button" class="alt" id="sheetCsv">${pick('sheetCsv')}</button>
     </div></div>`;
 }
@@ -913,13 +914,29 @@ function snapshot(){
   state.lastSent = `${ymd(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   save();
 }
+/* Apps Script は POST に別ドメインへのリダイレクトを返すため、通常の fetch では応答を読めず
+   「失敗した」と誤判定してしまう。実際にはシートへの書き込みは成功しているので、
+   そこで再送すると行が二重に入る。no-cors で一度だけ送り、応答は読まずに扱う。
+   万一届かなかった場合は未送信キューに残し、あとから同じ payload（同じ batchId）で送り直す。 */
+const newBatchId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
+const SEND_TIMEOUT = 20000;
+/* 同じ内容をもう一度押しても二重に記録しないよう、記録した時点の入力内容を覚えておく */
+const countsSig = () => JSON.stringify(state.counts);
+const alreadyRecorded = () => !!state.recordedSig && state.recordedSig === countsSig();
+let sending = false;
 async function postRows(payload){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), SEND_TIMEOUT);
   try{
-    const res = await fetch(state.sheetUrl, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:payload});
-    return res.ok;
+    await fetch(state.sheetUrl, {
+      method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:payload, signal:ctl.signal
+    });
+    return true;
   }catch(e){
-    try{ await fetch(state.sheetUrl, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:payload}); return true; }
-    catch(e2){ return false; }
+    return false;
+  }finally{
+    clearTimeout(timer);
   }
 }
 function bindSheet(){
@@ -936,11 +953,15 @@ function bindSheet(){
   if(obSend) obSend.onclick = async () => {
     if(!state.sheetUrl){ toast(pick('sheetNoUrl')); return; }
     obSend.disabled = true; obSend.textContent = pick('recSaving');
-    const keep = [];
-    for(const payload of (state.outbox || [])) if(!(await postRows(payload))) keep.push(payload);
-    state.outbox = keep; save();
-    toast(pick(keep.length ? 'outboxFail' : 'outboxOk'));
-    go(view);
+    try{
+      const keep = [];
+      for(const payload of (state.outbox || [])) if(!(await postRows(payload))) keep.push(payload);
+      state.outbox = keep; save();
+      toast(pick(keep.length ? 'outboxFail' : 'outboxOk'));
+    }finally{
+      obSend.disabled = false; obSend.textContent = pick('outboxSend');
+      go(view);
+    }
   };
   if(obDrop) obDrop.onclick = () => {
     if(!confirm(pick('confirmDrop'))) return;
@@ -948,18 +969,25 @@ function bindSheet(){
   };
   /* 発注の確定。シートが未設定でも端末には必ず記録する（納品画面と自動提案がこれを使う） */
   if(sendBtn) sendBtn.onclick = async () => {
+    if(sending || alreadyRecorded()) return;
     const rows = buildRows();
     if(!rows.length) return;
+    sending = true;
     sendBtn.disabled = true; sendBtn.textContent = pick('recSaving');
     let msg = 'recOkLocal';
-    if(state.sheetUrl){
-      const payload = JSON.stringify({store:state.store, rows});
-      if(await postRows(payload)) msg = 'recOkSheet';
-      else { state.outbox = [...(state.outbox || []), payload].slice(-20); msg = 'recOkOffline'; }
+    try{
+      if(state.sheetUrl){
+        const payload = JSON.stringify({store:state.store, batchId:newBatchId(), rows});
+        if(await postRows(payload)) msg = 'recOkSheet';
+        else { state.outbox = [...(state.outbox || []), payload].slice(-20); msg = 'recOkOffline'; }
+      }
+      state.recordedSig = countsSig();
+      snapshot();
+      toast(pick(msg));
+    }finally{
+      sending = false;
+      go(view);
     }
-    snapshot();
-    toast(pick(msg));
-    go(view);
   };
 }
 
@@ -1164,7 +1192,7 @@ function renderMaster(){
   };
   document.getElementById('resetAll').onclick = () => {
     if(!confirm(pick('confirmReset'))) return;
-    state.counts = {}; save(); toast(pick('resetDone'));
+    state.counts = {}; state.recordedSig = ''; save(); toast(pick('resetDone'));
   };
   document.getElementById('clearHist').onclick = () => {
     if(!confirm(pick('confirmHist'))) return;
