@@ -157,6 +157,11 @@
   .setrow .verrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px}
   .setrow .verrow button{flex:none;min-height:36px;border:1px solid var(--line);background:#F7F8F5;border-radius:7px;padding:7px 13px;font-size:12.5px}
   .danger{display:inline-block;margin:0;background:none;border:none;color:var(--ume);font-size:12.5px;text-decoration:underline;padding:11px 0}
+  .lockbox{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px 16px;margin-top:28px;text-align:center}
+  .lockbox .lockttl{margin:0 0 4px;font-size:14.5px;font-weight:700;color:var(--ink)}
+  .lockbox .lockcap{margin:0 0 16px;font-size:11.5px;color:var(--muted)}
+  .lockbox input{width:180px;max-width:100%;text-align:center;letter-spacing:.36em;font-size:22px;font-weight:700;padding:11px 9px;border:1px solid var(--line);border-radius:8px;background:#FBFCFA;color:var(--ink);margin-bottom:16px}
+  .lockbox .addbtn{margin-bottom:2px;border-style:solid;background:#F7F8F5;color:var(--ink)}
 
   .updbar{background:var(--dashi);color:#fff;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 9px) 12px 9px;font-size:13px;font-weight:600}
   .updbar[hidden]{display:none}
@@ -307,6 +312,31 @@ const L = {
   used:['ใช้ไป (ประมาณ)','使用量（概算）'],
   lastSent:['บันทึกครั้งล่าสุด ','前回の保存 '],
   confirmDelItem:['ลบรายการนี้ใช่หรือไม่','この品目を削除します。よろしいですか？'],
+
+  /* 設定画面のロック */
+  lockSect:['ล็อกหน้าตั้งค่า','設定画面のロック'],
+  lockDesc:['ตั้งรหัสผ่านเพื่อไม่ให้แก้สต๊อกมาตรฐาน ราคา หรือข้อมูลซัพพลายเออร์โดยไม่ตั้งใจ','基準在庫・単価・仕入先情報が勝手に変更されないよう、設定画面に暗証番号をかけます'],
+  lockStateOn:['สถานะ：ล็อกอยู่','状態：ロック中'],
+  lockStateOff:['สถานะ：ยังไม่ได้ล็อก','状態：ロックなし'],
+  lockCurrent:['รหัสปัจจุบัน','現在の暗証番号'],
+  lockNew:['รหัสใหม่ (ตัวเลข 4-8 หลัก)','新しい暗証番号（数字4〜8桁）'],
+  lockConfirm:['ยืนยันรหัสใหม่','新しい暗証番号（確認）'],
+  lockEnable:['เปิดใช้การล็อก','ロックを有効にする'],
+  lockChange:['เปลี่ยนรหัส','暗証番号を変更する'],
+  lockDisable:['ยกเลิกการล็อก','ロックを解除する'],
+  lockEnabled:['เปิดใช้การล็อกแล้ว','ロックを有効にしました'],
+  lockChanged:['เปลี่ยนรหัสแล้ว','暗証番号を変更しました'],
+  lockDisabled:['ยกเลิกการล็อกแล้ว','ロックを解除しました'],
+  lockBadDigits:['กรุณากรอกตัวเลข 4-8 หลัก','数字4〜8桁で入力してください'],
+  lockMismatch:['รหัสยืนยันไม่ตรงกัน','確認用の暗証番号が一致しません'],
+  lockWrong:['รหัสไม่ถูกต้อง','暗証番号が違います'],
+  lockTitle:['กรอกรหัสผ่าน','暗証番号を入力してください'],
+  lockHint:['หน้าตั้งค่าถูกล็อกไว้ กรุณาสอบถามผู้จัดการ','設定画面はロックされています。管理者に確認してください'],
+  lockOpen:['ปลดล็อก','ロックを解除'],
+  lockCancel:['กลับไปหน้านับ','在庫の画面に戻る'],
+  lockWait:['กรอกผิดหลายครั้ง กรุณารอ %n วินาที','間違いが続いたため、%n秒お待ちください'],
+  lockForgot:['ถ้าลืมรหัส ต้องล้างข้อมูลเบราว์เซอร์ของเครื่องนี้เท่านั้น จึงจะปลดล็อกได้','暗証番号を忘れた場合、この端末のブラウザデータを消す以外に解除する方法はありません'],
+  lockRelock:['จะล็อกอีกครั้งเมื่อออกจากหน้านี้หรือปิดแอป','この画面から離れる・アプリを閉じると、もう一度ロックがかかります'],
   confirmReset:['ล้างจำนวนที่กรอกทั้งหมด (การตั้งค่าจะยังอยู่)','入力した在庫数をすべて消します。設定は残ります'],
   resetDone:['ล้างข้อมูลแล้ว','在庫の入力を消しました'],
 
@@ -474,7 +504,7 @@ let state = {
   items: SAMPLE_ITEMS.map(o => ({...o})),
   units: [...DEFAULT_UNITS],
   counts:{}, prev:{}, groupBy:'sup', supFilter:null,
-  history:[], cycle:3, safety:20, outbox:[]
+  history:[], cycle:3, safety:20, outbox:[], pin:null
 };
 let view = 'count';
 
@@ -490,8 +520,13 @@ function save(){
 /* 入力直後に画面を閉じても保存が確定するように、離脱時は待たずに書き込む */
 function flushSave(){ if(saveTimer){ clearTimeout(saveTimer); writeNow(); } }
 document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'hidden') flushSave();
-  else checkForUpdate();
+  if(document.visibilityState === 'hidden'){
+    flushSave();
+    unlocked = false;                       /* アプリを離れたら設定画面は再びロックする */
+  }else{
+    if(view === 'master' && lockOn() && !unlocked) go('master');
+    checkForUpdate();
+  }
 });
 window.addEventListener('pagehide', flushSave);
 async function load(){
@@ -510,6 +545,55 @@ async function load(){
   if(!Array.isArray(state.outbox)) state.outbox = [];
   if(!(Number(state.cycle) > 0)) state.cycle = 3;
   if(state.safety === undefined || state.safety === null || isNaN(Number(state.safety))) state.safety = 20;
+  if(!(state.pin && state.pin.h && state.pin.s)) state.pin = null;
+}
+
+/* ---------- 設定画面のロック（暗証番号） ----------
+   基準在庫・単価・仕入先情報を店舗スタッフが変更できないようにするための簡易ロック。
+   暗証番号そのものは保存せず、ソルトを付けて繰り返しハッシュした文字列だけを端末に保存する。
+   解除状態はメモリにしか持たないので、画面を離れる・アプリを閉じると再びロックがかかる。 */
+let unlocked = false;
+let pinFail = 0, pinWaitUntil = 0;
+const lockOn = () => !!(state.pin && state.pin.h);
+function pinHash(pin, salt){
+  const s = salt + '|' + String(pin) + '|' + salt;
+  let h1 = 0x811c9dc5, h2 = 0x9e3779b9;
+  for(let r = 0; r < 997; r++){
+    for(let i = 0; i < s.length; i++){
+      const c = s.charCodeAt(i);
+      h1 = Math.imul((h1 ^ c) >>> 0, 16777619) >>> 0;
+      h2 = Math.imul((h2 + c * (i + 1)) ^ h1, 2654435761) >>> 0;
+    }
+  }
+  return h1.toString(36) + '-' + h2.toString(36);
+}
+const makePin = pin => { const s = Math.random().toString(36).slice(2, 10); return { s, h: pinHash(pin, s) }; };
+const pinCheck = pin => lockOn() && pinHash(String(pin == null ? '' : pin), state.pin.s) === state.pin.h;
+function renderLock(){
+  bar.hidden = true;
+  app.innerHTML = `<div class="lockbox">
+    <p class="lockttl">${pick('lockTitle')}</p>
+    <p class="lockcap">${pick('lockHint')}</p>
+    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" id="pinIn">
+    <button class="addbtn" id="pinGo">${one('lockOpen')}</button>
+    <button class="danger" id="pinCancel">${one('lockCancel')}</button>
+  </div>`;
+  const inp = document.getElementById('pinIn');
+  const submit = () => {
+    const left = Math.ceil((pinWaitUntil - Date.now()) / 1000);
+    if(left > 0){ toast(pick('lockWait').replace(/%n/g, left)); return; }
+    if(pinCheck(inp.value)){
+      unlocked = true; pinFail = 0; inp.value = ''; renderMaster(); return;
+    }
+    inp.value = '';
+    if(++pinFail >= 5){ pinFail = 0; pinWaitUntil = Date.now() + 30000; toast(pick('lockWait').replace(/%n/g, 30)); }
+    else toast(pick('lockWrong'));
+    inp.focus();
+  };
+  document.getElementById('pinGo').onclick = submit;
+  document.getElementById('pinCancel').onclick = () => go('count');
+  inp.onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); submit(); } };
+  setTimeout(() => { try{ inp.focus(); }catch(e){} }, 60);
 }
 
 /* ---------- 営業日判定 ---------- */
@@ -1017,6 +1101,19 @@ function renderMaster(){
       <button type="button" id="chkUpd">${pick('updCheck')}</button></p>
   </div>`;
 
+  html += `<p class="secttl">${one('lockSect')}</p>
+    <div class="setrow">
+      <p class="cap" style="margin:0">${pick('lockDesc')}</p>
+      <p class="cap"><b>${pick(lockOn() ? 'lockStateOn' : 'lockStateOff')}</b></p>
+      ${lockOn() ? `<label class="wide">${two('lockCurrent')}<input type="password" inputmode="numeric" maxlength="8" autocomplete="off" id="pinCur"></label>` : ''}
+      <label class="wide">${two('lockNew')}<input type="password" inputmode="numeric" maxlength="8" autocomplete="off" id="pinNew"></label>
+      <label class="wide">${two('lockConfirm')}<input type="password" inputmode="numeric" maxlength="8" autocomplete="off" id="pinNew2"></label>
+      <p class="cap">${pick('lockForgot')}</p>
+      ${lockOn() ? `<p class="cap">${pick('lockRelock')}</p>` : ''}
+    </div>
+    <button class="addbtn" id="pinSave">${one(lockOn() ? 'lockChange' : 'lockEnable')}</button>
+    ${lockOn() ? `<div style="margin:-14px 0 18px"><button class="danger" id="pinOff">${one('lockDisable')}</button></div>` : ''}`;
+
   html += `<p class="secttl">${one('unitSect')}</p>
     <div class="holchips">${(state.units||[]).map(u => `<button type="button" data-unitdel="${esc(u)}">${esc(u)}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
     <div class="add"><input type="text" id="newUnitInput" placeholder="${pick('newUnit')}"><button type="button" id="addUnitBtn">${pick('addBtn')}</button></div>`;
@@ -1100,6 +1197,29 @@ function renderMaster(){
     if(r === 'updating') return;                       /* 読み込み直すのでここで終わり */
     btn.disabled = false; btn.textContent = pick('updCheck');
     toast(pick(r === 'offline' ? 'updOffline' : 'updLatest'));
+  };
+
+  document.getElementById('pinSave').onclick = () => {
+    const cur = document.getElementById('pinCur');
+    if(lockOn() && !pinCheck(cur ? cur.value : '')){ toast(pick('lockWrong')); return; }
+    const a = (document.getElementById('pinNew').value || '').trim();
+    const b = (document.getElementById('pinNew2').value || '').trim();
+    if(!/^[0-9]{4,8}$/.test(a)){ toast(pick('lockBadDigits')); return; }
+    if(a !== b){ toast(pick('lockMismatch')); return; }
+    const was = lockOn();
+    state.pin = makePin(a); save(); flushSave();
+    unlocked = true; pinFail = 0; pinWaitUntil = 0;
+    toast(pick(was ? 'lockChanged' : 'lockEnabled'));
+    renderMaster();
+  };
+  const pinOffBtn = document.getElementById('pinOff');
+  if(pinOffBtn) pinOffBtn.onclick = () => {
+    const cur = document.getElementById('pinCur');
+    if(!pinCheck(cur ? cur.value : '')){ toast(pick('lockWrong')); return; }
+    state.pin = null; save(); flushSave();
+    unlocked = true; pinFail = 0; pinWaitUntil = 0;
+    toast(pick('lockDisabled'));
+    renderMaster();
   };
 
   app.querySelectorAll('[data-sf2]').forEach(el => {
@@ -1280,10 +1400,15 @@ function copy(text){
   }
 }
 function go(v){
+  if(view === 'master' && v !== 'master') unlocked = false;   /* 設定画面から離れたら再びロックする */
   view = v;
   document.querySelectorAll('[data-nav]').forEach(b => b.setAttribute('aria-current', String(b.dataset.nav === v)));
   window.scrollTo(0,0);
-  if(v === 'count') renderCount(); else if(v === 'recv') renderRecv(); else if(v === 'result') renderResult(); else renderMaster();
+  if(v === 'count') renderCount();
+  else if(v === 'recv') renderRecv();
+  else if(v === 'result') renderResult();
+  else if(lockOn() && !unlocked) renderLock();
+  else renderMaster();
 }
 app.addEventListener('input', e => {
   const t = e.target;
