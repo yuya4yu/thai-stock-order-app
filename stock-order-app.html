@@ -152,8 +152,16 @@
   .setrow label>.ja::before{content:"／"}
   .setrow input,.setrow select{border:1px solid var(--line);border-radius:7px;padding:9px;background:#FBFCFA;font-size:15px;width:100%;color:var(--ink)}
   .setrow .cap{grid-column:1/-1;font-size:11px;color:var(--muted);margin:-2px 0 0}
+  .setrow .verrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px}
+  .setrow .verrow button{flex:none;min-height:36px;border:1px solid var(--line);background:#F7F8F5;border-radius:7px;padding:7px 13px;font-size:12.5px}
   .danger{display:inline-block;margin:0;background:none;border:none;color:var(--ume);font-size:12.5px;text-decoration:underline;padding:11px 0}
 
+  .updbar{background:var(--dashi);color:#fff;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 9px) 12px 9px;font-size:13px;font-weight:600}
+  .updbar[hidden]{display:none}
+  .updbar .t{flex:1;min-width:0}
+  body:has(.updbar:not([hidden])) header{padding-top:10px}
+  .updbar button{flex:none;min-height:36px;border:1px solid #fff;background:#fff;color:var(--dashi);border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700}
+  .updbar button.x{background:transparent;color:#fff;border-color:rgba(255,255,255,.6);padding:6px 11px}
   .toast{position:fixed;left:50%;bottom:calc(var(--bar) + 18px);transform:translateX(-50%);background:var(--nori);color:#F2F3EF;padding:10px 16px;border-radius:999px;font-size:13px;z-index:50;opacity:0;pointer-events:none;transition:opacity .18s;max-width:88%;text-align:center}
   .toast.on{opacity:1}
 
@@ -176,6 +184,8 @@
   .sugrow .v .old{text-decoration:line-through;margin:0 4px}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
+
+<div class="updbar" id="updbar" hidden></div>
 
 <header>
   <div class="hrow">
@@ -345,7 +355,17 @@ const L = {
   outboxOk:['ส่งข้อมูลที่ค้างอยู่แล้ว','未送信分を送信しました'],
   outboxFail:['ยังส่งไม่สำเร็จ ลองใหม่ภายหลัง','まだ送信できません。あとで再度お試しください'],
   outboxDrop:['ทิ้งข้อมูลที่ค้างอยู่','未送信分を破棄'],
-  confirmDrop:['ทิ้งข้อมูลที่ยังไม่ได้ส่งทั้งหมด','未送信のデータをすべて破棄します。よろしいですか？']
+  confirmDrop:['ทิ้งข้อมูลที่ยังไม่ได้ส่งทั้งหมด','未送信のデータをすべて破棄します。よろしいですか？'],
+
+  /* 自動更新 */
+  updNew:['มีเวอร์ชันใหม่แล้ว','新しい版があります'],
+  updBtn:['อัปเดต','更新'],
+  updClose:['ปิด','閉じる'],
+  updCheck:['ตรวจหาเวอร์ชันใหม่','更新を確認'],
+  updChecking:['กำลังตรวจสอบ…','確認中…'],
+  updLatest:['ใช้เวอร์ชันล่าสุดอยู่แล้ว','すでに最新です'],
+  updOffline:['ตรวจสอบไม่ได้ ตรวจสอบการเชื่อมต่อ','確認できませんでした。通信状態をご確認ください'],
+  fVersion:['เวอร์ชันที่ใช้อยู่','この端末の版']
 };
 const two = k => `<span class="th">${L[k][0]}</span><span class="ja">${L[k][1]}</span>`;
 const one = k => `${L[k][0]}／${L[k][1]}`;
@@ -466,7 +486,10 @@ function save(){
 }
 /* 入力直後に画面を閉じても保存が確定するように、離脱時は待たずに書き込む */
 function flushSave(){ if(saveTimer){ clearTimeout(saveTimer); writeNow(); } }
-document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') flushSave(); });
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden') flushSave();
+  else checkForUpdate();
+});
 window.addEventListener('pagehide', flushSave);
 async function load(){
   try{
@@ -960,6 +983,8 @@ function renderMaster(){
     </select></label>
     <label class="wide">${two('fSheetUrl')}<input type="url" inputmode="url" placeholder="https://script.google.com/macros/s/..." id="setSheet" value="${esc(state.sheetUrl||'')}"></label>
     <p class="cap">${pick('sheetCap')}</p>
+    <p class="cap verrow"><span class="num">${pick('fVersion')}：${esc(buildStamp())}</span>
+      <button type="button" id="chkUpd">${pick('updCheck')}</button></p>
   </div>`;
 
   html += `<p class="secttl">${one('unitSect')}</p>
@@ -1038,6 +1063,14 @@ function renderMaster(){
   document.getElementById('setCycle').oninput = e => { state.cycle = e.target.value === '' ? '' : Number(e.target.value); save(); };
   document.getElementById('setSafety').oninput = e => { state.safety = e.target.value === '' ? 0 : Number(e.target.value); save(); };
   document.getElementById('sugCalc').onclick = renderSuggest;
+  document.getElementById('chkUpd').onclick = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true; btn.textContent = pick('updChecking');
+    const r = await checkForUpdate(true);
+    if(r === 'updating') return;                       /* 読み込み直すのでここで終わり */
+    btn.disabled = false; btn.textContent = pick('updCheck');
+    toast(pick(r === 'offline' ? 'updOffline' : 'updLatest'));
+  };
 
   app.querySelectorAll('[data-sf2]').forEach(el => {
     el.oninput = () => { const s = state.suppliers.find(x => x.id === el.dataset.id); if(s){ s[el.dataset.sf2] = el.value; save(); } };
@@ -1144,6 +1177,54 @@ function reopenMaster(supId, focus){
   if(el){ el.open = true; el.scrollIntoView({block:'center'}); if(focus) el.querySelector('input').select(); }
 }
 
+/* ---------- 自動更新チェック ----------
+   GitHub Pages はHTMLを10分キャッシュするため、更新してもスマホに古い版が残ることがある。
+   サーバー側の Last-Modified と、いま動いている文書の document.lastModified を比べ、
+   新しければクエリを付けて読み込み直す（＝キャッシュを迂回する）。版番号を手で振る必要はない。 */
+const UPD_KEY = 'stock-order-app-updated-to';
+let updCheckedAt = 0;
+const buildStamp = () => {
+  const d = new Date(document.lastModified);
+  if(isNaN(d.getTime())) return '—';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+};
+function applyUpdate(stamp){
+  flushSave();
+  try{ sessionStorage.setItem(UPD_KEY, String(stamp)); }catch(e){}
+  location.replace(location.pathname + '?v=' + stamp);
+}
+function showUpdBar(stamp){
+  const el = document.getElementById('updbar');
+  if(!el) return;
+  el.innerHTML = `<span class="t">${pick('updNew')}</span>
+    <button type="button" id="updGo">${pick('updBtn')}</button>
+    <button type="button" class="x" id="updX" aria-label="${pick('updClose')}">✕</button>`;
+  el.hidden = false;
+  window.scrollTo(0, 0);
+  document.getElementById('updGo').onclick = () => applyUpdate(stamp);
+  document.getElementById('updX').onclick = () => { el.hidden = true; };
+}
+async function checkForUpdate(manual){
+  const now = Date.now();
+  if(!manual && now - updCheckedAt < 60000) return 'skip';
+  updCheckedAt = now;
+  let lm = null;
+  try{
+    const res = await fetch(location.pathname + '?t=' + now, {method:'HEAD', cache:'no-store'});
+    if(res.ok) lm = res.headers.get('last-modified');
+  }catch(e){ return 'offline'; }
+  if(!lm) return 'unknown';
+  const server = new Date(lm).getTime();
+  const mine = new Date(document.lastModified).getTime();
+  if(isNaN(server) || isNaN(mine) || server - mine <= 2000) return 'latest';
+  if(manual){ applyUpdate(server); return 'updating'; }
+  let tried = null;
+  try{ tried = sessionStorage.getItem(UPD_KEY); }catch(e){}
+  if(tried === String(server)){ showUpdBar(server); return 'bar'; }   /* 一度やり直しても古いまま → 自動では繰り返さない */
+  applyUpdate(server);
+  return 'updating';
+}
+
 /* ---------- 共通 ---------- */
 const app = document.getElementById('app');
 const bar = document.getElementById('bar');
@@ -1224,5 +1305,6 @@ document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => go(b.data
   document.getElementById('today').textContent = dateStr();
   storeTitle.textContent = state.store || 'นับสต๊อก';
   go('count');
+  checkForUpdate();
 })();
 </script>
