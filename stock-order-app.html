@@ -165,6 +165,8 @@
 
   .updbar{background:var(--dashi);color:#fff;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 9px) 12px 9px;font-size:13px;font-weight:600}
   .updbar[hidden]{display:none}
+  .holbar{background:#FBF3E2;color:#6B5426;border-bottom:1px solid #EFE2C4;padding:9px 13px;font-size:12.5px;font-weight:600;line-height:1.45}
+  .holbar[hidden]{display:none}
   .updbar .t{flex:1;min-width:0}
   body:has(.updbar:not([hidden])) header{padding-top:10px}
   .updbar button{flex:none;min-height:36px;border:1px solid #fff;background:#fff;color:var(--dashi);border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700}
@@ -207,6 +209,7 @@
   </nav>
 </header>
 
+<div class="holbar" id="holbar" hidden></div>
 <main id="app"></main>
 <div class="bar" id="bar" hidden></div>
 <div class="toast" id="toast"></div>
@@ -376,6 +379,21 @@ const L = {
   restEmpty:['ไม่พบข้อมูลของสาขานี้ กรุณาตรวจสอบชื่อสาขา','この店舗の記録が見つかりませんでした。設定の店舗名を確認してください'],
   restErr:['กู้ข้อมูลไม่สำเร็จ ตรวจสอบ URL และการ deploy ใหม่อีกครั้ง','復元できませんでした。URLと再デプロイを確認してください'],
   restNoUrl:['ยังไม่ได้ตั้งค่า URL ของชีต (หน้าตั้งค่า)','シートのURLが未設定です（設定画面）'],
+
+  /* 祝日（表示のみ） */
+  holSect:['วันหยุดนักขัตฤกษ์','タイの祝日'],
+  holDesc:['แสดงเตือนว่าวันนี้เป็นวันหยุด ไม่ได้ห้ามสั่งซื้อ ถ้าซัพพลายเออร์หยุดจริงให้ใส่ในวันหยุดพิเศษของซัพพลายเออร์','「この日は祝日です」と知らせるだけの機能です。発注は止めません。仕入先が実際に休む日は、仕入先ごとの臨時休業日に登録してください'],
+  holToday:['วันนี้เป็นวันหยุด：','本日は祝日：'],
+  holSoon:['ใกล้ถึงวันหยุด：','もうすぐ祝日：'],
+  holCount:['ลงทะเบียนไว้ %n วัน','%n日ぶん登録しています'],
+  holNone:['ยังไม่ได้ลงทะเบียนวันหยุด','祝日が登録されていません'],
+  holUpcoming:['วันหยุดที่จะถึง','これからの祝日'],
+  holName:['ชื่อวันหยุด','祝日の名前'],
+  holAddY:['ลงทะเบียนวันหยุดไทยปี %n','%n年のタイの祝日を登録'],
+  holAdded:['ลงทะเบียนแล้ว %n วัน','%n日ぶん登録しました'],
+  holClear:['ลบวันหยุดทั้งหมด','祝日をすべて消す'],
+  holClearOk:['ลบวันหยุดทั้งหมดใช่หรือไม่','登録した祝日をすべて消します。よろしいですか？'],
+  holNote:['ปี 2571 (2028) เป็นต้นไปให้เพิ่มเองหรือแจ้งผู้ดูแล','2028年以降の祝日は、判明したら手動で追加してください'],
   histClear:['ล้างประวัติการใช้ทั้งหมด','使用履歴をすべて消す'],
   confirmHist:['ล้างประวัติการใช้ทั้งหมด (การตั้งค่าจะยังอยู่)','使用履歴をすべて消します。設定は残ります'],
   histCleared:['ล้างประวัติแล้ว','使用履歴を消しました'],
@@ -512,7 +530,7 @@ let state = {
   items: SAMPLE_ITEMS.map(o => ({...o})),
   units: [...DEFAULT_UNITS],
   counts:{}, prev:{}, groupBy:'sup', supFilter:null,
-  history:[], cycle:3, safety:20, outbox:[], pin:null
+  history:[], cycle:3, safety:20, outbox:[], pin:null, hol:[]
 };
 let view = 'count';
 
@@ -554,6 +572,7 @@ async function load(){
   if(!(Number(state.cycle) > 0)) state.cycle = 3;
   if(state.safety === undefined || state.safety === null || isNaN(Number(state.safety))) state.safety = 20;
   if(!(state.pin && state.pin.h && state.pin.s)) state.pin = null;
+  if(!Array.isArray(state.hol)) state.hol = [];
 }
 
 /* ---------- 設定画面のロック（暗証番号） ----------
@@ -898,6 +917,112 @@ function updateRecvBar(){
   if(b) b.onclick = () => go('count');
 }
 
+/* ---------- タイの祝日（表示のみ） ----------
+   祝日は「この日は祝日です」と知らせるだけで、発注は止めない。
+   仕入先が実際に休む日は、これまでどおり仕入先ごとの臨時休業日に登録する。
+   出典：タイ銀行が公表した金融機関の休日および各年の政府公表分。
+   2028年以降は設定画面から手動で追加する。 */
+const TH_HOLIDAYS = {
+  2026: [
+    ['2026-01-01','วันขึ้นปีใหม่','元日'],
+    ['2026-01-02','วันหยุดราชการเพิ่มเติมปีใหม่','年始の休み'],
+    ['2026-03-03','วันมาฆบูชา','マーカブーチャ'],
+    ['2026-04-06','วันจักรี','チャクリー記念日'],
+    ['2026-04-13','วันสงกรานต์','ソンクラーン'],
+    ['2026-04-14','วันสงกรานต์','ソンクラーン'],
+    ['2026-04-15','วันสงกรานต์','ソンクラーン'],
+    ['2026-05-01','วันแรงงานแห่งชาติ','メーデー'],
+    ['2026-05-04','วันฉัตรมงคล','戴冠記念日'],
+    ['2026-05-31','วันวิสาขบูชา','ウィサーカブーチャ'],
+    ['2026-06-01','วันหยุดชดเชยวันวิสาขบูชา','ウィサーカブーチャの振替'],
+    ['2026-06-03','วันเฉลิมพระชนมพรรษาสมเด็จพระราชินี','王妃誕生日'],
+    ['2026-07-28','วันเฉลิมพระชนมพรรษาในหลวง ร.10','国王誕生日'],
+    ['2026-07-29','วันอาสาฬหบูชา','アーサーラハブーチャ'],
+    ['2026-07-30','วันเข้าพรรษา','入安居（カオパンサー）'],
+    ['2026-08-12','วันแม่แห่งชาติ','母の日（王太后誕生日）'],
+    ['2026-10-13','วันนวมินทรมหาราช','ラーマ9世記念日'],
+    ['2026-10-23','วันปิยมหาราช','チュラロンコン大王記念日'],
+    ['2026-12-05','วันพ่อแห่งชาติ','父の日（ラーマ9世誕生日）'],
+    ['2026-12-07','วันหยุดชดเชยวันพ่อแห่งชาติ','父の日の振替'],
+    ['2026-12-10','วันรัฐธรรมนูญ','憲法記念日'],
+    ['2026-12-31','วันสิ้นปี','大晦日']
+  ],
+  2027: [
+    ['2027-01-01','วันขึ้นปีใหม่','元日'],
+    ['2027-02-21','วันมาฆบูชา','マーカブーチャ'],
+    ['2027-02-22','วันหยุดชดเชยวันมาฆบูชา','マーカブーチャの振替'],
+    ['2027-04-06','วันจักรี','チャクリー記念日'],
+    ['2027-04-13','วันสงกรานต์','ソンクラーン'],
+    ['2027-04-14','วันสงกรานต์','ソンクラーン'],
+    ['2027-04-15','วันสงกรานต์','ソンクラーン'],
+    ['2027-05-01','วันแรงงานแห่งชาติ','メーデー'],
+    ['2027-05-03','วันหยุดชดเชยวันแรงงานแห่งชาติ','メーデーの振替'],
+    ['2027-05-04','วันฉัตรมงคล','戴冠記念日'],
+    ['2027-05-20','วันวิสาขบูชา','ウィサーカブーチャ'],
+    ['2027-06-03','วันเฉลิมพระชนมพรรษาสมเด็จพระราชินี','王妃誕生日'],
+    ['2027-07-18','วันอาสาฬหบูชา','アーサーラハブーチャ'],
+    ['2027-07-19','วันเข้าพรรษา','入安居（カオパンサー）'],
+    ['2027-07-28','วันเฉลิมพระชนมพรรษาในหลวง ร.10','国王誕生日'],
+    ['2027-08-12','วันแม่แห่งชาติ','母の日（王太后誕生日）'],
+    ['2027-10-13','วันนวมินทรมหาราช','ラーマ9世記念日'],
+    ['2027-10-23','วันปิยมหาราช','チュラロンコン大王記念日'],
+    ['2027-10-25','วันหยุดชดเชยวันปิยมหาราช','チュラロンコン大王記念日の振替'],
+    ['2027-12-05','วันพ่อแห่งชาติ','父の日（ラーマ9世誕生日）'],
+    ['2027-12-06','วันหยุดชดเชยวันพ่อแห่งชาติ','父の日の振替'],
+    ['2027-12-10','วันรัฐธรรมนูญ','憲法記念日'],
+    ['2027-12-31','วันสิ้นปี','大晦日']
+  ]
+};
+const holName = h => state.lang === 'ja' ? (h.ja || h.th)
+  : (state.lang === 'th' ? h.th : `${h.th}／${h.ja || h.th}`);
+function addHolidayYear(y){
+  const src = TH_HOLIDAYS[y] || [];
+  if(!Array.isArray(state.hol)) state.hol = [];
+  const have = new Set(state.hol.map(h => h.d + '|' + h.th));
+  let n = 0;
+  for(const [d, th, ja] of src){
+    if(have.has(d + '|' + th)) continue;
+    state.hol.push({d, th, ja}); n++;
+  }
+  state.hol.sort((a, b) => a.d < b.d ? -1 : 1);
+  return n;
+}
+/* 「タイ語の文／日本語の文」の形にそろえる。pick() をそのまま使うと
+   「タイ語見出し／日本語見出し：タイ語の名前／日本語の名前」と入れ子になって読みにくいため。 */
+function holLine(key, names, dateYmd){
+  const stamp = i => {
+    if(!dateYmd) return '';
+    const d = new Date(dateYmd + 'T00:00:00');
+    const w = i === 1 ? WD_JA[d.getDay()] : WD_TH[d.getDay()];
+    return `${d.getDate()}/${d.getMonth() + 1}(${w}) `;
+  };
+  const line = i => L[key][i] + stamp(i) + names.map(h => (i === 1 ? (h.ja || h.th) : h.th)).join(' / ');
+  if(state.lang === 'ja') return line(1);
+  if(state.lang === 'th') return line(0);
+  return line(0) + '　／　' + line(1);
+}
+function renderHolBar(){
+  const el = document.getElementById('holbar');
+  if(!el) return;
+  const list = Array.isArray(state.hol) ? state.hol : [];
+  const t = new Date();
+  const today = ymd(t);
+  const todays = list.filter(h => h.d === today);
+  if(todays.length){
+    el.hidden = false;
+    el.textContent = holLine('holToday', todays, '');
+    return;
+  }
+  const lim = ymd(new Date(t.getFullYear(), t.getMonth(), t.getDate() + 7));
+  const soon = list.filter(h => h.d > today && h.d <= lim).sort((a, b) => a.d < b.d ? -1 : 1)[0];
+  if(soon){
+    el.hidden = false;
+    el.textContent = holLine('holSoon', [soon], soon.d);
+    return;
+  }
+  el.hidden = true;
+}
+
 /* ---------- シートから使用履歴を読み戻す ----------
    自動提案のもとになる使用履歴は端末のブラウザにしか無いため、機種変更や初期化で失われる。
    シートには毎回の記録が残っているので、そこから履歴を組み立て直して端末に戻す。
@@ -1186,6 +1311,27 @@ function renderMaster(){
     </div>
     <button class="addbtn" id="restHist">${one('restTitle')}</button>`;
 
+  const holToday = ymd(new Date());
+  const holUp = (state.hol || []).filter(h => h.d >= holToday).slice(0, 12);
+  const holShort = d => String(d).slice(0, 4) === String(new Date().getFullYear())
+    ? String(d).slice(5).replace('-', '/')
+    : String(d).replace(/-/g, '/');   /* 年をまたぐぶんは年も出す */
+  html += `<p class="secttl">${one('holSect')}</p>
+    <div class="setrow">
+      <p class="cap" style="margin:0">${pick('holDesc')}</p>
+      <p class="cap">${(state.hol || []).length ? pick('holCount').replace(/%n/g, state.hol.length) : pick('holNone')}</p>
+    </div>
+    <div class="add">
+      <input type="date" id="holD">
+      <input type="text" id="holN" placeholder="${pick('holName')}">
+      <button type="button" id="holAdd">${pick('addBtn')}</button>
+    </div>
+    <p class="cap" style="margin:-12px 2px 0">${pick('holUpcoming')}</p>
+    <div class="holchips" style="margin-bottom:16px">${holUp.map(h => `<button type="button" data-holdel2="${esc(h.d)}" data-n="${esc(h.th)}">${esc(holShort(h.d))} ${esc(holName(h))}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
+    ${Object.keys(TH_HOLIDAYS).map(y => `<button class="addbtn" type="button" data-holy="${y}" style="margin-bottom:8px">${one('holAddY').replace(/%n/g, y)}</button>`).join('')}
+    <p class="cap" style="margin:4px 2px 14px;font-size:11px;color:var(--muted)">${pick('holNote')}</p>
+    <div style="margin-bottom:16px"><button class="danger" id="holClearBtn">${one('holClear')}</button></div>`;
+
   html += `<p class="secttl">${one('supSect')}</p>`;
   for(const s of state.suppliers){
     html += `<details class="mcard">
@@ -1249,6 +1395,37 @@ function renderMaster(){
   document.getElementById('setSafety').oninput = e => { state.safety = e.target.value === '' ? 0 : Number(e.target.value); save(); };
   document.getElementById('sugCalc').onclick = renderSuggest;
   document.getElementById('restHist').onclick = e => restoreHistory(e.currentTarget);
+
+  document.getElementById('holAdd').onclick = () => {
+    const d = document.getElementById('holD').value;
+    const n = (document.getElementById('holN').value || '').trim();
+    if(!d) return;
+    if(!Array.isArray(state.hol)) state.hol = [];
+    const label = n || d;
+    if(!state.hol.some(h => h.d === d && h.th === label)){
+      state.hol.push({d, th: label, ja: label});
+      state.hol.sort((a, b) => a.d < b.d ? -1 : 1);
+      save();
+    }
+    renderMaster(); renderHolBar();
+  };
+  app.querySelectorAll('[data-holdel2]').forEach(b => {
+    b.onclick = () => {
+      state.hol = (state.hol || []).filter(h => !(h.d === b.dataset.holdel2 && h.th === b.dataset.n));
+      save(); renderMaster(); renderHolBar();
+    };
+  });
+  app.querySelectorAll('[data-holy]').forEach(b => {
+    b.onclick = () => {
+      const n = addHolidayYear(Number(b.dataset.holy));
+      save(); renderMaster(); renderHolBar();
+      toast(pick('holAdded').replace(/%n/g, n));
+    };
+  });
+  document.getElementById('holClearBtn').onclick = () => {
+    if(!confirm(pick('holClearOk'))) return;
+    state.hol = []; save(); renderMaster(); renderHolBar();
+  };
   document.getElementById('chkUpd').onclick = async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true; btn.textContent = pick('updChecking');
@@ -1463,6 +1640,7 @@ function go(v){
   view = v;
   document.querySelectorAll('[data-nav]').forEach(b => b.setAttribute('aria-current', String(b.dataset.nav === v)));
   window.scrollTo(0,0);
+  renderHolBar();
   if(v === 'count') renderCount();
   else if(v === 'recv') renderRecv();
   else if(v === 'result') renderResult();
@@ -1519,6 +1697,7 @@ document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => go(b.data
   document.getElementById('today').textContent = dateStr();
   storeTitle.textContent = state.store || 'นับสต๊อก';
   go('count');
+  renderHolBar();
   checkForUpdate();
 })();
 </script>
