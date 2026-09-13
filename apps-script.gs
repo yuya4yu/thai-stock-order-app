@@ -53,8 +53,99 @@ function doPost(e) {
   }
 }
 
-function doGet() {
-  return json_({ ok: true, message: 'ready' });
+/**
+ * 読み出し口。
+ *   ?mode=history&store=<店舗名>&days=28  … その店舗の使用履歴と、直近の在庫・発注内容を返す
+ *   （引数なし）                          … 疎通確認用の {"ok":true,"message":"ready"}
+ * callback= が付いているときは JSONP（JavaScript）で返す。
+ * ブラウザから素の fetch で読むと CORS で弾かれることがあるため、アプリ側は JSONP で読んでいる。
+ */
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+  if (p.mode === 'history') {
+    return reply_(p.callback, history_(String(p.store || ''), Number(p.days) || 28));
+  }
+  return reply_(p.callback, { ok: true, message: 'ready' });
+}
+
+/**
+ * LOGシートから、指定した店舗の使用履歴を組み立て直す。
+ * 「何日分を使ったか」はシートに列が無いため、同じ品目の記録を日付順に並べ、
+ * 1つ前の記録との日数の差から計算する（アプリが記録時に行っているのと同じ計算）。
+ */
+function history_(store, days) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName('LOG');
+    if (!sh || sh.getLastRow() < 2) return { ok: true, rows: [], prev: [] };
+
+    var values = sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).getValues();
+    var byItem = {};
+    for (var i = 0; i < values.length; i++) {
+      var r = values[i];
+      if (store && String(r[2] || '') !== store) continue;   // 3列目＝店舗
+      var id = String(r[6] || '');                           // 7列目＝品目ID
+      var d = dateStr_(r[0]);                                // 1列目＝日付
+      if (!id || !d) continue;
+      if (!byItem[id]) byItem[id] = [];
+      byItem[id].push({ d: d, t: String(r[1] || ''), used: r[14], stock: r[13], order: r[16] });
+    }
+
+    var limit = new Date();
+    limit.setDate(limit.getDate() - days);
+    var from = Utilities.formatDate(limit, tz_(), 'yyyy-MM-dd');
+
+    var rows = [], prev = [];
+    var ids = Object.keys(byItem);
+    for (var k = 0; k < ids.length; k++) {
+      var list = byItem[ids[k]].sort(function (a, b) {
+        return (a.d + ' ' + a.t) < (b.d + ' ' + b.t) ? -1 : 1;
+      });
+      for (var j = 1; j < list.length; j++) {
+        if (list[j].used === '' || list[j].used === null) continue;
+        var used = Number(list[j].used);
+        if (isNaN(used)) continue;
+        var gap = dayGap_(list[j - 1].d, list[j].d);
+        if (!(gap > 0 && gap <= 90)) continue;               // 同日・間隔が空きすぎの記録は使わない
+        if (list[j].d < from) continue;
+        rows.push({ id: ids[k], d: list[j].d, used: used, days: gap });
+      }
+      var last = list[list.length - 1];
+      prev.push({ id: ids[k], stock: numOr_(last.stock), order: numOr_(last.order), date: last.d });
+    }
+    return { ok: true, rows: rows, prev: prev, store: store };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function tz_() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || 'Asia/Bangkok';
+}
+
+function dateStr_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
+  var s = String(v || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+}
+
+function dayGap_(a, b) {
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+
+function numOr_(v) {
+  var n = Number(v);
+  return (v === '' || v === null || isNaN(n)) ? '' : n;
+}
+
+function reply_(callback, obj) {
+  var body = JSON.stringify(obj);
+  if (callback && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(callback)) {
+    return ContentService
+      .createTextOutput(callback + '(' + body + ');')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
 }
 
 // 受け取り済みの送信IDを覚えておき、同じものが来たら書き込まない

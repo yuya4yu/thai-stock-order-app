@@ -41,69 +41,13 @@ URLは変わりません。直ったかどうかは、ウェブアプリのURL�
 
 > コードを後から変更したときは、「デプロイ」→「デプロイを管理」→ 鉛筆アイコン →「バージョン」を「新バージョン」にして再デプロイしてください。URLは変わりません。
 
-## 貼り付けるコード（表示用。実際は `apps-script.gs` からコピーしてください）
+## 貼り付けるコード
 
-```javascript
-const HEADERS = [
-  '日付/วันที่', '時刻/เวลา', '店舗/สาขา',
-  '仕入先ID', '仕入先/ซัพพลายเออร์', '仕入先(JA)',
-  '品目ID', '品目/รายการ', '品目(JA)', '区分/หมวด', '単位/หน่วย',
-  '前回在庫/สต๊อกครั้งก่อน', '入荷/รับเข้า', '今回在庫/สต๊อกวันนี้',
-  '使用量(概算)/ใช้ไป', '基準/มาตรฐาน',
-  '発注数/สั่งซื้อ', '単価/ราคาต่อหน่วย', '金額/มูลค่า', '通貨/สกุลเงิน'
-];
+コードは `apps-script.gs` に入っています。ファイルを開いて中身をすべてコピーし、Apps Script エディタに貼り付けてください。
 
-function doPost(e) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+以前はこの手順書にもコードを載せていましたが、二重管理で古いものを貼ってしまう事故を避けるため、`apps-script.gs` の1か所だけに置くことにしました。
 
-    // 明細シート（追記していく元データ）
-    const sh = getSheet_(ss, 'LOG');
-    const rows = (data.rows || []).map(r => ([
-      r.date, r.time, r.store,
-      r.supplierId, r.supplier, r.supplierJa,
-      r.itemId, r.item, r.itemJa, r.category, r.unit,
-      r.prevStock, r.received, r.stock,
-      r.used, r.par,
-      r.order, r.price, r.amount, r.currency
-    ]));
-    if (rows.length) {
-      sh.getRange(sh.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
-    }
-    return json_({ ok: true, added: rows.length });
-  } catch (err) {
-    return json_({ ok: false, error: String(err) });
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function doGet() {
-  return json_({ ok: true, message: 'ready' });
-}
-
-function getSheet_(ss, name) {
-  let sh = ss.getSheetByName(name);
-  if (!sh) {
-    sh = ss.insertSheet(name);
-  }
-  if (sh.getLastRow() === 0) {
-    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-    sh.setFrozenRows(1);
-    sh.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
-  }
-  return sh;
-}
-
-function json_(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-```
+> この手順書のコード例をコピーすると、Markdown の ``` の記号ごと貼り付けてしまい `TypeError: "" is not a function` というエラーになります。必ず `apps-script.gs` からコピーしてください。
 
 ## 記録される列
 
@@ -130,3 +74,33 @@ function json_(obj) {
 - 納品数を入力しないまま次回のカウントを保存した場合は、従来どおり「発注数どおり届いた」ものとして計算します（旧データとの互換のため）。
 
 Apps Script 側のコードと列構成の変更は不要です。「入荷/รับเข้า」列の意味が「前回の発注数」から「実際に届いた数量」に変わるだけです。
+
+## 使用履歴の復元（読み出し口）
+
+自動提案のもとになる使用履歴は、ふだんは端末のブラウザにだけ保存されています。機種変更・初期化・2台目の端末では履歴がゼロからになり、自動提案がしばらく使えません。
+
+これを避けるため、Apps Script に読み出し口（`doGet`）を用意しています。アプリの設定画面「基準在庫・発注ロットの自動提案」の下にある「กู้ประวัติจากชีต / シートから使用履歴を復元」を押すと、シートの記録から履歴を組み立て直して端末に戻します。
+
+**復元されるもの**
+
+- 直近4週間の使用履歴（品目ID・日付・使用量・前回からの日数）
+- 品目ごとの前回在庫と、最後に記録した発注内容
+
+「何日分を使ったか」はシートに列がないため、同じ品目の記録を日付順に並べ、1つ前の記録との日数の差から計算しています（アプリが記録時に行っているのと同じ計算です）。同じ日に2回記録した分は使いません。
+
+**注意**
+
+- 復元は**設定画面の店舗名**をキーにしています。店舗名が記録時と違うと「見つかりません」になります。表記を揃えてください。
+- 端末にある履歴と前回在庫は、シートの内容で**置き換え**られます（実行前に確認が出ます）。在庫を数えている途中には押さないでください。
+- 削除して作り直した品目は品目IDが変わっているため復元されません。
+- アプリからの読み出しは JSONP（`callback=` 付きのGET）で行っています。Apps Script への通常の `fetch` は CORS で読めないことがあるためです。
+- **この機能を追加したときは再デプロイが必要です。** 保存しただけでは反映されません（「デプロイを管理」→「新バージョン」）。
+- 読み出し口ができたことで、ウェブアプリURLを知っている人はシートの使用量・単価を読める状態になります。URLはアプリの設定画面にのみ入れ、設定画面は暗証番号でロックしておいてください。
+
+動作確認は、ブラウザで次のURLを開くと行えます（`<exec URL>` は自分のウェブアプリURL、`<店舗名>` は設定画面の店舗名）。
+
+```
+<exec URL>?mode=history&store=<店舗名>&days=28
+```
+
+`{"ok":true,"rows":[...],"prev":[...]}` が返れば正常です。`rows` が空の場合は、店舗名の表記を確認してください。

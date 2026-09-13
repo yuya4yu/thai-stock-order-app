@@ -368,6 +368,14 @@ const L = {
   sugNoHist:['ยังไม่มีประวัติการใช้ ต้องบันทึกลงชีตอย่างน้อย 2 ครั้งจึงจะคำนวณได้','使用履歴がまだありません。シートへの保存を2回以上行うと計算できます'],
   sugApplied:['อัปเดตแล้ว %n รายการ','%n品目を更新しました'],
   histCount:['บันทึกประวัติการใช้ไว้ %n รายการ','使用履歴を%n件記録しています'],
+  restTitle:['กู้ประวัติจากชีต','シートから使用履歴を復元'],
+  restDesc:['ใช้ตอนเปลี่ยนเครื่องหรือเพิ่มเครื่องที่สอง ดึงประวัติ 4 สัปดาห์ล่าสุดของสาขานี้จากสเปรดชีต','機種変更や2台目の端末で使うときに、この店舗の直近4週間の記録をスプレッドシートから読み戻します'],
+  restConfirm:['จะแทนที่ประวัติการใช้และสต๊อกครั้งก่อนในเครื่องนี้ด้วยข้อมูลจากชีต ดำเนินการต่อหรือไม่','この端末の使用履歴と前回在庫を、シートの記録で置き換えます。よろしいですか？'],
+  restLoading:['กำลังกู้ข้อมูล…','復元中…'],
+  restOk:['กู้ประวัติแล้ว %n รายการ','使用履歴を%n件復元しました'],
+  restEmpty:['ไม่พบข้อมูลของสาขานี้ กรุณาตรวจสอบชื่อสาขา','この店舗の記録が見つかりませんでした。設定の店舗名を確認してください'],
+  restErr:['กู้ข้อมูลไม่สำเร็จ ตรวจสอบ URL และการ deploy ใหม่อีกครั้ง','復元できませんでした。URLと再デプロイを確認してください'],
+  restNoUrl:['ยังไม่ได้ตั้งค่า URL ของชีต (หน้าตั้งค่า)','シートのURLが未設定です（設定画面）'],
   histClear:['ล้างประวัติการใช้ทั้งหมด','使用履歴をすべて消す'],
   confirmHist:['ล้างประวัติการใช้ทั้งหมด (การตั้งค่าจะยังอยู่)','使用履歴をすべて消します。設定は残ります'],
   histCleared:['ล้างประวัติแล้ว','使用履歴を消しました'],
@@ -890,6 +898,52 @@ function updateRecvBar(){
   if(b) b.onclick = () => go('count');
 }
 
+/* ---------- シートから使用履歴を読み戻す ----------
+   自動提案のもとになる使用履歴は端末のブラウザにしか無いため、機種変更や初期化で失われる。
+   シートには毎回の記録が残っているので、そこから履歴を組み立て直して端末に戻す。
+   Apps Script への GET は素の fetch だと CORS で読めないことがあるため、JSONP（script タグ）で読む。 */
+function jsonp(url, params, ms){
+  return new Promise((resolve, reject) => {
+    const cb = 'cb_' + Math.random().toString(36).slice(2, 10);
+    const sc = document.createElement('script');
+    let done = false;
+    const cleanup = () => { try{ delete window[cb]; }catch(e){ window[cb] = undefined; } sc.remove(); };
+    const timer = setTimeout(() => { if(!done){ done = true; cleanup(); reject(new Error('timeout')); } }, ms || 25000);
+    window[cb] = data => { done = true; clearTimeout(timer); cleanup(); resolve(data); };
+    sc.onerror = () => { if(!done){ done = true; clearTimeout(timer); cleanup(); reject(new Error('network')); } };
+    const q = new URLSearchParams(Object.assign({}, params, {callback: cb})).toString();
+    sc.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + q;
+    document.head.appendChild(sc);
+  });
+}
+async function restoreHistory(btn){
+  if(!state.sheetUrl){ toast(pick('restNoUrl')); return; }
+  if(!confirm(pick('restConfirm'))) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = pick('restLoading');
+  try{
+    const r = await jsonp(state.sheetUrl, {mode:'history', store: state.store || '', days: 28});
+    if(!r || !r.ok) throw new Error((r && r.error) || 'ng');
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+    const prevs = Array.isArray(r.prev) ? r.prev : [];
+    if(!rows.length && !prevs.length){ toast(pick('restEmpty')); return; }
+    const ids = new Set(state.items.map(i => i.id));
+    state.history = rows.filter(h => ids.has(h.id))
+      .map(h => ({id:h.id, d:h.d, used:Number(h.used) || 0, days:Number(h.days) || 0}));
+    prevs.forEach(p => {
+      if(!ids.has(p.id)) return;
+      state.prev[p.id] = {stock: Number(p.stock) || 0, order: Number(p.order) || 0, date: p.date, received: null};
+    });
+    save(); flushSave();
+    toast(pick('restOk').replace(/%n/g, state.history.length));
+    renderMaster();
+  }catch(e){
+    toast(pick('restErr'));
+  }finally{
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+
 /* ============ 基準在庫・発注ロットの自動提案 ============ */
 const leadOf = it => { const sp = supOf(it); const v = sp ? Number(sp.lead) : NaN; return v > 0 ? v : 1; };
 function usageStats(itemId, windowDays){
@@ -1126,7 +1180,11 @@ function renderMaster(){
       <p class="cap">${pick('histCount').replace(/%n/g, state.history.length)}</p>
     </div>
     <button class="addbtn" id="sugCalc" style="margin-bottom:14px">${one('sugCalc')}</button>
-    <div id="sugBox"></div>`;
+    <div id="sugBox"></div>
+    <div class="setrow" style="margin-top:14px">
+      <p class="cap" style="margin:0">${pick('restDesc')}</p>
+    </div>
+    <button class="addbtn" id="restHist">${one('restTitle')}</button>`;
 
   html += `<p class="secttl">${one('supSect')}</p>`;
   for(const s of state.suppliers){
@@ -1190,6 +1248,7 @@ function renderMaster(){
   document.getElementById('setCycle').oninput = e => { state.cycle = e.target.value === '' ? '' : Number(e.target.value); save(); };
   document.getElementById('setSafety').oninput = e => { state.safety = e.target.value === '' ? 0 : Number(e.target.value); save(); };
   document.getElementById('sugCalc').onclick = renderSuggest;
+  document.getElementById('restHist').onclick = e => restoreHistory(e.currentTarget);
   document.getElementById('chkUpd').onclick = async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true; btn.textContent = pick('updChecking');
