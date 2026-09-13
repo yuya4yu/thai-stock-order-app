@@ -34,8 +34,8 @@
   .hrow{display:flex;align-items:baseline;gap:10px}
   .hrow h1{margin:0;font-size:16px;font-weight:700}
   .hrow .date{margin-left:auto;font-size:12px;color:#A9AFA6;text-align:right;white-space:nowrap}
-  .tabs{display:flex;gap:6px;margin-top:10px}
-  .tabs button{flex:1;background:transparent;border:1px solid #444A51;color:#C3C8BE;border-radius:9px;padding:6px 8px;font-size:13px;text-align:center}
+  .tabs{display:flex;gap:5px;margin-top:10px}
+  .tabs button{flex:1;min-width:0;background:transparent;border:1px solid #444A51;color:#C3C8BE;border-radius:9px;padding:6px 4px;font-size:12px;text-align:center}
   .tabs button[aria-current="true"]{background:#F2F3EF;color:var(--nori);border-color:#F2F3EF;font-weight:700}
 
   main{padding:12px 12px 8px;max-width:620px;margin:0 auto}
@@ -74,6 +74,7 @@
   .stepper input[type=number]{-moz-appearance:textfield}
 
   .bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(233,235,230,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:8px 12px calc(8px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px}
+  .bar[hidden]{display:none}
   .bar .sum{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35}
   .bar .sum b{display:block;font-size:14.5px;color:var(--ink);font-variant-numeric:tabular-nums}
   .go{flex:none;background:var(--nori);color:#F2F3EF;border:none;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:700;text-align:center}
@@ -132,11 +133,12 @@
   .days .dd button[aria-pressed="true"]{background:var(--ume);color:#fff;border-color:var(--ume);font-weight:700}
   .hol{grid-column:1/-1}
   .hol > .cap{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
-  .hol .add{display:flex;gap:6px}
-  .hol .add input{flex:1;border:1px solid var(--line);border-radius:7px;padding:9px;background:#FBFCFA;font-size:15px}
-  .hol .add button{flex:none;padding:9px 14px;border:1px solid var(--line);background:#F7F8F5;border-radius:7px;font-size:14px}
+  .add{display:flex;gap:6px;margin-bottom:18px}
+  .hol .add{margin-bottom:0}
+  .add input{flex:1;min-width:0;border:1px solid var(--line);border-radius:7px;padding:11px 9px;background:#FBFCFA;font-size:15px}
+  .add button{flex:none;min-height:44px;padding:9px 18px;border:1px solid var(--line);background:#F7F8F5;border-radius:7px;font-size:14px}
   .holchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
-  .holchips button{border:1px solid var(--line);background:#FBFCFA;border-radius:999px;padding:5px 10px;font-size:12px}
+  .holchips button{display:inline-flex;align-items:center;min-height:40px;border:1px solid var(--line);background:#FBFCFA;border-radius:999px;padding:5px 13px;font-size:12.5px}
   .holchips button::after{content:" ×";color:var(--ume);font-weight:700}
   .del{grid-column:1/-1;justify-self:start;background:none;border:none;color:var(--ume);font-size:12.5px;padding:4px 0;text-decoration:underline}
   .addbtn{width:100%;padding:13px;border:1px dashed var(--line);background:transparent;border-radius:var(--radius);color:var(--muted);font-weight:600;margin-bottom:22px}
@@ -147,10 +149,28 @@
   .setrow label>.ja::before{content:"／"}
   .setrow input,.setrow select{border:1px solid var(--line);border-radius:7px;padding:9px;background:#FBFCFA;font-size:15px;width:100%;color:var(--ink)}
   .setrow .cap{grid-column:1/-1;font-size:11px;color:var(--muted);margin:-2px 0 0}
-  .danger{margin:4px 0 0;background:none;border:none;color:var(--ume);font-size:12.5px;text-decoration:underline;padding:0}
+  .danger{display:inline-block;margin:0;background:none;border:none;color:var(--ume);font-size:12.5px;text-decoration:underline;padding:11px 0}
 
   .toast{position:fixed;left:50%;bottom:calc(var(--bar) + 18px);transform:translateX(-50%);background:var(--nori);color:#F2F3EF;padding:10px 16px;border-radius:999px;font-size:13px;z-index:50;opacity:0;pointer-events:none;transition:opacity .18s;max-width:88%;text-align:center}
   .toast.on{opacity:1}
+
+  /* 納品入力 */
+  .rbtns{display:flex;gap:8px;margin:0 0 14px}
+  .rbtns button{flex:1;border:1px solid var(--take);background:transparent;color:var(--take);border-radius:9px;padding:11px 8px;font-size:13px;font-weight:700}
+  .rbtns button.alt{border-color:var(--line);color:var(--muted)}
+  .flag.short{color:var(--ume)} .flag.exact{color:var(--take)} .flag.over{color:var(--dashi)}
+  .emptysub{display:block;font-size:12px;margin-top:8px}
+
+  /* 自動提案 */
+  .sug{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:12px;overflow:hidden}
+  .sugrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line)}
+  .sugrow:first-child{border-top:none}
+  .sugrow input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--take);margin:0}
+  .sugrow .n{flex:1;min-width:0;font-size:13px}
+  .sugrow .n .d{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+  .sugrow .v{flex:none;text-align:right;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.6}
+  .sugrow .v b{font-size:13.5px;color:var(--ink)}
+  .sugrow .v .old{text-decoration:line-through;margin:0 4px}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -160,8 +180,9 @@
     <span class="date num" id="today"></span>
   </div>
   <nav class="tabs">
-    <button data-nav="count" aria-current="true"><span class="th">นับสต๊อก</span><span class="ja">在庫を数える</span></button>
-    <button data-nav="result"><span class="th">รายการสั่งซื้อ</span><span class="ja">発注リスト</span></button>
+    <button data-nav="count" aria-current="true"><span class="th">นับสต๊อก</span><span class="ja">在庫</span></button>
+    <button data-nav="recv"><span class="th">รับของ</span><span class="ja">納品</span></button>
+    <button data-nav="result"><span class="th">สั่งซื้อ</span><span class="ja">発注</span></button>
     <button data-nav="master"><span class="th">ตั้งค่า</span><span class="ja">設定</span></button>
   </nav>
 </header>
@@ -175,6 +196,18 @@ const KEY = 'stock-order-app-v3';
 const WD_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
 const WD_JA = ['日','月','火','水','木','金','土'];
 const DEFAULT_UNITS = ['g','kg','個','パック','袋','本','枚','缶','箱','ℓ','ml'];
+
+/* ---------- 保存領域 ----------
+   プレビュー環境では window.storage が用意されるが、GitHub Pages など通常のブラウザには存在しない。
+   未定義のままだと save()/load() が黙って失敗し、設定も在庫入力も残らない。
+   そのため window.storage が無い環境では localStorage を同じインターフェースで代用する。 */
+if(!window.storage){
+  window.storage = {
+    async get(k){ try{ const v = localStorage.getItem(k); return v === null ? null : {value:v}; }catch(e){ return null; } },
+    async set(k, v){ try{ localStorage.setItem(k, v); return true; }catch(e){ return false; } },
+    async remove(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  };
+}
 
 /* ---------- 文言 ---------- */
 const L = {
@@ -260,7 +293,40 @@ const L = {
   lastSent:['บันทึกครั้งล่าสุด ','前回の保存 '],
   confirmDelItem:['ลบรายการนี้ใช่หรือไม่','この品目を削除します。よろしいですか？'],
   confirmReset:['ล้างจำนวนที่กรอกทั้งหมด (การตั้งค่าจะยังอยู่)','入力した在庫数をすべて消します。設定は残ります'],
-  resetDone:['ล้างข้อมูลแล้ว','在庫の入力を消しました']
+  resetDone:['ล้างข้อมูลแล้ว','在庫の入力を消しました'],
+
+  /* 納品 */
+  recvHint:['กรอกจำนวนที่ได้รับจริง ถ้าได้ครบตามที่สั่งกดปุ่มด้านล่างได้เลย','実際に届いた数量を入力してください。発注どおり届いた場合は下のボタンで一括入力できます'],
+  recvNone:['ยังไม่มีออเดอร์ที่รอรับของ','納品待ちの発注はありません'],
+  recvNoneHint:['หลังกด「บันทึกลงชีต」ในหน้าสั่งซื้อ รายการที่สั่งจะมาแสดงที่นี่','発注リスト画面で「シートに保存」を押すと、発注した品目がここに表示されます'],
+  recvOrdered:['สั่งไว้ ','発注 '],
+  recvOn:['วันที่สั่ง ','発注日 '],
+  recvAllOk:['ได้รับครบตามที่สั่ง','すべて発注どおり'],
+  recvClear:['ล้างที่กรอกไว้','入力を消す'],
+  recvShort:['ขาด ','不足 '],
+  recvOver:['เกิน ','超過 '],
+  recvExact:['ครบตามที่สั่ง','発注どおり'],
+  recvPending:['ยังไม่ได้กรอก','未入力'],
+  recvCount:[' รายการรอรับของ',' 品目が納品待ち'],
+
+  /* 自動提案 */
+  sugSect:['แนะนำสต๊อกมาตรฐานอัตโนมัติ','基準在庫・発注ロットの自動提案'],
+  sugDesc:['คำนวณจากปริมาณที่ใช้จริง 4 สัปดาห์ล่าสุด บวก lead time ของซัพพลายเออร์','直近4週間の実使用量と、仕入先のリードタイムから計算します'],
+  sugCycle:['รอบการสั่ง (วัน)','発注サイクル（日）'],
+  sugSafety:['เผื่อความปลอดภัย (%)','安全率（%）'],
+  sugCalc:['คำนวณข้อเสนอ','提案を計算する'],
+  sugApply:['นำไปใช้กับรายการที่เลือก','チェックした品目に反映'],
+  sugPar:['มาตรฐาน','基準'],
+  sugLot:['ล็อต','ロット'],
+  sugPerDay:['/วัน','/日'],
+  sugTimes:[' ครั้ง',' 回'],
+  sugNoHist:['ยังไม่มีประวัติการใช้ ต้องบันทึกลงชีตอย่างน้อย 2 ครั้งจึงจะคำนวณได้','使用履歴がまだありません。シートへの保存を2回以上行うと計算できます'],
+  sugApplied:['อัปเดตแล้ว %n รายการ','%n品目を更新しました'],
+  histCount:['บันทึกประวัติการใช้ไว้ %n รายการ','使用履歴を%n件記録しています'],
+  histClear:['ล้างประวัติการใช้ทั้งหมด','使用履歴をすべて消す'],
+  confirmHist:['ล้างประวัติการใช้ทั้งหมด (การตั้งค่าจะยังอยู่)','使用履歴をすべて消します。設定は残ります'],
+  histCleared:['ล้างประวัติแล้ว','使用履歴を消しました'],
+  fLead:['Lead time (วันกว่าของจะถึง)','リードタイム（発注から納品までの日数）']
 };
 const two = k => `<span class="th">${L[k][0]}</span><span class="ja">${L[k][1]}</span>`;
 const one = k => `${L[k][0]}／${L[k][1]}`;
@@ -365,7 +431,8 @@ let state = {
   suppliers: SAMPLE_SUPS.map(o => ({...o, closed:[...o.closed], holidays:[]})),
   items: SAMPLE_ITEMS.map(o => ({...o})),
   units: [...DEFAULT_UNITS],
-  counts:{}, prev:{}, groupBy:'sup', supFilter:null
+  counts:{}, prev:{}, groupBy:'sup', supFilter:null,
+  history:[], cycle:3, safety:20
 };
 let view = 'count';
 
@@ -386,11 +453,15 @@ async function load(){
   state.suppliers.forEach(s => { if(!Array.isArray(s.closed)) s.closed = []; if(!Array.isArray(s.holidays)) s.holidays = []; });
   if(!state.prev) state.prev = {};
   if(!Array.isArray(state.units) || !state.units.length) state.units = [...DEFAULT_UNITS];
+  if(!Array.isArray(state.history)) state.history = [];
+  if(!(Number(state.cycle) > 0)) state.cycle = 3;
+  if(state.safety === undefined || state.safety === null || isNaN(Number(state.safety))) state.safety = 20;
 }
 
 /* ---------- 営業日判定 ---------- */
 const supOf = it => state.suppliers.find(s => s.id === it.supId) || null;
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const dayGap = (a, b) => Math.round((new Date(b+'T00:00:00') - new Date(a+'T00:00:00')) / 86400000);
 const wd = i => state.lang === 'ja' ? WD_JA[i] : (state.lang === 'th' ? WD_TH[i] : WD_TH[i]);
 function isClosed(sup, d){ return sup ? ((sup.closed||[]).includes(d.getDay()) || (sup.holidays||[]).includes(ymd(d))) : false; }
 function pastCutoff(sup, d){
@@ -436,11 +507,17 @@ function orderQty(item){
 const money = n => state.currency + Math.round(n).toLocaleString('en-US');
 const fmt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits:2});
 const visibleItems = () => state.supFilter ? state.items.filter(i => i.supId === state.supFilter) : state.items;
+/* 入荷数：納品実数が入力されていればそれを使い、未入力なら発注数で代用する */
+const receivedOf = p => {
+  if(!p) return 0;
+  const r = num(p.received);
+  return r === null ? Number(p.order || 0) : r;
+};
 function usedQty(item){
   const p = state.prev[item.id];
   const c = num(state.counts[item.id]);
   if(!p || c === null) return null;
-  const u = round2(Number(p.stock) + Number(p.order || 0) - c);
+  const u = round2(Number(p.stock) + receivedOf(p) - c);
   return u < 0 ? 0 : u;
 }
 function summary(){
@@ -599,6 +676,140 @@ function renderResult(){
   document.getElementById('back').onclick = () => go('count');
 }
 
+/* ============ 納品（実数入力） ============ */
+const pendingItems = () => visibleItems().filter(it => {
+  const p = state.prev[it.id];
+  return p && Number(p.order || 0) > 0;
+});
+function recvFlag(it, v){
+  const p = state.prev[it.id] || {};
+  const r = num(v);
+  if(r === null) return `<div class="flag none">${pick('recvPending')}</div>`;
+  const diff = round2(r - Number(p.order || 0));
+  if(diff === 0) return `<div class="flag exact">${pick('recvExact')}</div>`;
+  if(diff < 0) return `<div class="flag short">${L.recvShort[state.lang==='ja'?1:0]}${fmt(-diff)} ${esc(it.unit)}</div>`;
+  return `<div class="flag over">${L.recvOver[state.lang==='ja'?1:0]}${fmt(diff)} ${esc(it.unit)}</div>`;
+}
+function renderRecv(){
+  const list = pendingItems();
+  let html = filterBar() + `<p class="hint">${pick('recvHint')}</p>`;
+  if(!list.length){
+    app.innerHTML = html + `<div class="empty">${pick('recvNone')}<span class="emptysub">${pick('recvNoneHint')}</span></div>`;
+    bindFilter(); bar.hidden = true; return;
+  }
+  html += `<div class="rbtns">
+    <button type="button" id="recvAll">${pick('recvAllOk')}</button>
+    <button type="button" class="alt" id="recvClr">${pick('recvClear')}</button></div>`;
+  for(const k of [...new Set(list.map(i => i.supId || ''))]){
+    const rows = list.filter(i => (i.supId || '') === k);
+    const sup = state.suppliers.find(x => x.id === k);
+    html += `<section class="group"><div class="ghead"><h2>${sup ? nm(sup) : pick('noSupplier')}</h2>
+      <span class="next">${rows.length}${L.items[state.lang==='ja'?1:0]}</span></div><div class="rows">`;
+    for(const it of rows){
+      const pr = state.prev[it.id];
+      const v = (pr.received === null || pr.received === undefined || pr.received === '') ? '' : pr.received;
+      html += `<div class="row">
+        <div class="info"><div class="nm">${nm(it)}</div>
+          <div class="meta num">${L.recvOrdered[state.lang==='ja'?1:0]}${fmt(pr.order)} ${esc(it.unit)}・${L.recvOn[state.lang==='ja'?1:0]}${esc(pr.date || '')}</div>
+          ${recvFlag(it, v)}</div>
+        <div class="stepper">
+          <button type="button" data-rstep="-1" data-rid="${it.id}" aria-label="-">−</button>
+          <input type="number" inputmode="decimal" step="any" min="0" placeholder="—" value="${v}" data-recv="${it.id}" aria-label="${esc(it.name)}">
+          <button type="button" data-rstep="1" data-rid="${it.id}" aria-label="+">＋</button>
+        </div></div>`;
+    }
+    html += '</div></section>';
+  }
+  app.innerHTML = html;
+  bindFilter();
+  document.getElementById('recvAll').onclick = () => {
+    pendingItems().forEach(it => { state.prev[it.id].received = Number(state.prev[it.id].order || 0); });
+    save(); renderRecv();
+  };
+  document.getElementById('recvClr').onclick = () => {
+    pendingItems().forEach(it => { state.prev[it.id].received = null; });
+    save(); renderRecv();
+  };
+  updateRecvBar();
+}
+function updateRecvRow(input){
+  const it = state.items.find(x => x.id === input.dataset.recv);
+  if(!it) return;
+  const flag = input.closest('.row').querySelector('.flag');
+  const tmp = document.createElement('div');
+  tmp.innerHTML = recvFlag(it, input.value);
+  flag.className = tmp.firstElementChild.className;
+  flag.textContent = tmp.firstElementChild.textContent;
+  updateRecvBar();
+}
+function updateRecvBar(){
+  const list = pendingItems();
+  const done = list.filter(it => num((state.prev[it.id] || {}).received) !== null).length;
+  bar.hidden = false;
+  bar.innerHTML = `<div class="sum"><b class="num">${done} / ${list.length}${L.filled[state.lang==='ja'?1:0]}</b>${list.length - done}${L.recvCount[state.lang==='ja'?1:0]}</div>
+    <button class="go" id="recvBack">${two('backCount')}</button>`;
+  const b = document.getElementById('recvBack');
+  if(b) b.onclick = () => go('count');
+}
+
+/* ============ 基準在庫・発注ロットの自動提案 ============ */
+const leadOf = it => { const sp = supOf(it); const v = sp ? Number(sp.lead) : NaN; return v > 0 ? v : 1; };
+function usageStats(itemId, windowDays){
+  const lim = new Date(); lim.setDate(lim.getDate() - (windowDays || 28));
+  const from = ymd(lim);
+  const rows = state.history.filter(h => h.id === itemId && h.d >= from);
+  if(!rows.length) return null;
+  const used = rows.reduce((a, h) => a + Number(h.used || 0), 0);
+  const days = rows.reduce((a, h) => a + Number(h.days || 0), 0);
+  if(!(days > 0)) return null;
+  return {perDay: used / days, n: rows.length};
+}
+/* 現場が数えやすい刻みに切り上げる（例 137→150、600→600、23→25） */
+const NICE_STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+const niceRound = n => {
+  if(!(n > 0)) return 0;
+  const e = Math.pow(10, Math.floor(Math.log10(n)));
+  for(const m of NICE_STEPS) if(n <= m * e + 1e-9) return round2(m * e);
+  return round2(10 * e);
+};
+function suggestFor(it){
+  const st = usageStats(it.id, 28);
+  if(!st || !(st.perDay > 0)) return null;
+  const cycle = Number(state.cycle) > 0 ? Number(state.cycle) : 3;
+  const safety = 1 + (Number(state.safety) || 0) / 100;
+  return {perDay: st.perDay, n: st.n,
+    par: niceRound(st.perDay * (leadOf(it) + cycle) * safety),
+    lot: niceRound(st.perDay * cycle)};
+}
+function renderSuggest(){
+  const box = document.getElementById('sugBox');
+  if(!box) return;
+  const rows = state.items.map(it => ({it, sg: suggestFor(it)})).filter(r => r.sg && r.sg.par > 0);
+  if(!rows.length){ box.innerHTML = `<div class="warn">${pick('sugNoHist')}</div>`; return; }
+  let h = '<div class="sug">';
+  for(const r of rows){
+    const changed = Number(r.it.par) !== r.sg.par || Number(r.it.lot) !== r.sg.lot;
+    h += `<label class="sugrow">
+      <input type="checkbox" data-sug="${r.it.id}" ${changed ? 'checked' : ''}>
+      <span class="n">${nm(r.it)}<span class="d num">${fmt(round2(r.sg.perDay))} ${esc(r.it.unit)}${L.sugPerDay[state.lang==='ja'?1:0]}・${r.sg.n}${L.sugTimes[state.lang==='ja'?1:0]}</span></span>
+      <span class="v">${L.sugPar[state.lang==='ja'?1:0]}<span class="old">${fmt(r.it.par)}</span><b>${fmt(r.sg.par)}</b><br>${L.sugLot[state.lang==='ja'?1:0]}<span class="old">${fmt(r.it.lot)}</span><b>${fmt(r.sg.lot)}</b></span>
+    </label>`;
+  }
+  box.innerHTML = h + `</div><button class="addbtn" id="sugApply">${one('sugApply')}</button>`;
+  document.getElementById('sugApply').onclick = () => {
+    let n = 0;
+    box.querySelectorAll('[data-sug]:checked').forEach(cb => {
+      const it = state.items.find(x => x.id === cb.dataset.sug);
+      const sg = it ? suggestFor(it) : null;
+      if(!sg || !(sg.par > 0)) return;
+      it.par = sg.par;
+      if(sg.lot > 0) it.lot = sg.lot;
+      n++;
+    });
+    save(); renderMaster(); toast(pick('sugApplied').replace(/%n/g, n));
+  };
+}
+
 /* ---------- シート送信 ---------- */
 function sheetBox(){
   return `<div class="sheetbox">
@@ -621,7 +832,7 @@ function buildRows(){
       store: state.store,
       supplierId: s ? s.id : '', supplier: s ? s.name : '', supplierJa: s ? (s.nameJa||'') : '',
       itemId: it.id, item: it.name, itemJa: it.nameJa || '', unit: it.unit, category: it.cat || '',
-      prevStock: p ? p.stock : '', received: p ? (p.order || 0) : '',
+      prevStock: p ? p.stock : '', received: p ? receivedOf(p) : '',
       stock: num(state.counts[it.id]), used: u === null ? '' : u,
       par: it.par, order: q, price: it.price, amount: round2(q*Number(it.price||0)), currency: state.currency
     };
@@ -629,11 +840,19 @@ function buildRows(){
 }
 function snapshot(){
   const d = new Date();
+  const today = ymd(d);
   for(const it of state.items){
     const c = num(state.counts[it.id]);
     if(c === null) continue;
-    state.prev[it.id] = {stock:c, order:orderQty(it) || 0, date:ymd(d)};
+    const p = state.prev[it.id];
+    const u = usedQty(it);
+    if(p && p.date && u !== null){
+      const days = dayGap(p.date, today);
+      if(days > 0 && days <= 90) state.history.push({id:it.id, d:today, used:u, days});
+    }
+    state.prev[it.id] = {stock:c, order:orderQty(it) || 0, date:today, received:null};
   }
+  if(state.history.length > 3000) state.history = state.history.slice(-3000);
   state.lastSent = `${ymd(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   save();
 }
@@ -691,6 +910,16 @@ function renderMaster(){
     <div class="holchips">${(state.units||[]).map(u => `<button type="button" data-unitdel="${esc(u)}">${esc(u)}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
     <div class="add"><input type="text" id="newUnitInput" placeholder="${pick('newUnit')}"><button type="button" id="addUnitBtn">${pick('addBtn')}</button></div>`;
 
+  html += `<p class="secttl">${one('sugSect')}</p>
+    <div class="setrow">
+      <p class="cap" style="margin:0">${pick('sugDesc')}</p>
+      <label>${two('sugCycle')}<input type="number" step="1" min="1" inputmode="numeric" id="setCycle" value="${Number(state.cycle) || 3}"></label>
+      <label>${two('sugSafety')}<input type="number" step="5" min="0" inputmode="numeric" id="setSafety" value="${Number(state.safety) || 0}"></label>
+      <p class="cap">${pick('histCount').replace(/%n/g, state.history.length)}</p>
+    </div>
+    <button class="addbtn" id="sugCalc" style="margin-bottom:14px">${one('sugCalc')}</button>
+    <div id="sugBox"></div>`;
+
   html += `<p class="secttl">${one('supSect')}</p>`;
   for(const s of state.suppliers){
     html += `<details class="mcard">
@@ -706,6 +935,7 @@ function renderMaster(){
           ${WD_TH.map((w,i) => `<button type="button" data-day="${i}" data-id="${s.id}" aria-pressed="${(s.closed||[]).includes(i)}">${state.lang==='ja'?WD_JA[i]:w}</button>`).join('')}
         </div></div>
         <label class="wide">${two('fCutoff')}<input type="time" data-sf2="cutoff" data-id="${s.id}" value="${esc(s.cutoff||'')}"></label>
+        <label class="wide">${two('fLead')}<input type="number" step="1" min="0" inputmode="numeric" data-sf2n="lead" data-id="${s.id}" value="${s.lead === undefined || s.lead === '' ? 1 : s.lead}"></label>
         <div class="hol"><span class="cap">${one('fHoliday')}</span>
           <div class="add"><input type="date" data-hol="${s.id}"><button type="button" data-holadd="${s.id}">${pick('addBtn')}</button></div>
           <div class="holchips">${(s.holidays||[]).slice().sort().map(h => `<button type="button" data-holdel="${s.id}" data-d="${h}">${esc(h)}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
@@ -738,7 +968,8 @@ function renderMaster(){
       </div></details>`;
   }
   html += `<button class="addbtn" id="addItem">${one('addItem')}</button>
-    <button class="danger" id="resetAll">${one('resetAll')}</button>`;
+    <div><button class="danger" id="resetAll">${one('resetAll')}</button></div>
+    <div><button class="danger" id="clearHist">${one('histClear')}</button></div>`;
 
   app.innerHTML = html;
   bar.hidden = true;
@@ -748,9 +979,15 @@ function renderMaster(){
   document.getElementById('setLang').onchange = e => { state.lang = e.target.value; applyLang(); save(); renderMaster(); };
   document.getElementById('setGroup').onchange = e => { state.groupBy = e.target.value; save(); };
   document.getElementById('setSheet').oninput = e => { state.sheetUrl = e.target.value.trim(); save(); };
+  document.getElementById('setCycle').oninput = e => { state.cycle = e.target.value === '' ? '' : Number(e.target.value); save(); };
+  document.getElementById('setSafety').oninput = e => { state.safety = e.target.value === '' ? 0 : Number(e.target.value); save(); };
+  document.getElementById('sugCalc').onclick = renderSuggest;
 
   app.querySelectorAll('[data-sf2]').forEach(el => {
     el.oninput = () => { const s = state.suppliers.find(x => x.id === el.dataset.id); if(s){ s[el.dataset.sf2] = el.value; save(); } };
+  });
+  app.querySelectorAll('[data-sf2n]').forEach(el => {
+    el.oninput = () => { const s = state.suppliers.find(x => x.id === el.dataset.id); if(s){ s[el.dataset.sf2n] = el.value === '' ? '' : Number(el.value); save(); } };
   });
   app.querySelectorAll('[data-day]').forEach(b => {
     b.onclick = () => {
@@ -840,6 +1077,10 @@ function renderMaster(){
     if(!confirm(pick('confirmReset'))) return;
     state.counts = {}; save(); toast(pick('resetDone'));
   };
+  document.getElementById('clearHist').onclick = () => {
+    if(!confirm(pick('confirmHist'))) return;
+    state.history = []; save(); renderMaster(); toast(pick('histCleared'));
+  };
 }
 function reopenMaster(supId, focus){
   renderMaster();
@@ -875,15 +1116,31 @@ function go(v){
   view = v;
   document.querySelectorAll('[data-nav]').forEach(b => b.setAttribute('aria-current', String(b.dataset.nav === v)));
   window.scrollTo(0,0);
-  if(v === 'count') renderCount(); else if(v === 'result') renderResult(); else renderMaster();
+  if(v === 'count') renderCount(); else if(v === 'recv') renderRecv(); else if(v === 'result') renderResult(); else renderMaster();
 }
 app.addEventListener('input', e => {
   const t = e.target;
+  if(t.dataset.recv){
+    const p = state.prev[t.dataset.recv];
+    if(p){ p.received = t.value === '' ? null : Number(t.value); save(); updateRecvRow(t); }
+    return;
+  }
   if(!t.dataset.count) return;
   state.counts[t.dataset.count] = t.value === '' ? '' : t.value;
   save(); updateRow(t);
 });
 app.addEventListener('click', e => {
+  const rb = e.target.closest('[data-rstep]');
+  if(rb){
+    const input = app.querySelector(`[data-recv="${rb.dataset.rid}"]`);
+    const p = state.prev[rb.dataset.rid];
+    if(!input || !p) return;
+    const cur = num(input.value);
+    const next = Math.max(0, round2((cur === null ? Number(p.order || 0) : cur) + Number(rb.dataset.rstep)));
+    input.value = next; p.received = next;
+    save(); updateRecvRow(input);
+    return;
+  }
   const b = e.target.closest('[data-step]');
   if(!b) return;
   const input = app.querySelector(`[data-count="${b.dataset.id}"]`);
