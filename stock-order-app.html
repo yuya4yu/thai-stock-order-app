@@ -3,7 +3,7 @@
 <title>นับสต๊อก・在庫カウント</title>
 <style>
   :root{
-    --paper:#E9EBE6; --card:#FFFFFF; --ink:#15181B; --muted:#6A7168; --line:#D2D7CB;
+    --paper:#E9EBE6; --card:#FFFFFF; --ink:#15181B; --muted:#5C6259; --line:#D2D7CB;
     --nori:#21252A; --ume:#B32133; --dashi:#A0701A; --take:#2E6B4F;
     --radius:10px; --bar:70px;
   }
@@ -35,7 +35,7 @@
   .hrow h1{margin:0;font-size:16px;font-weight:700}
   .hrow .date{margin-left:auto;font-size:12px;color:#A9AFA6;text-align:right;white-space:nowrap}
   .tabs{display:flex;gap:5px;margin-top:10px}
-  .tabs button{flex:1;min-width:0;background:transparent;border:1px solid #444A51;color:#C3C8BE;border-radius:9px;padding:6px 4px;font-size:12px;text-align:center}
+  .tabs button{flex:1;min-width:0;background:transparent;border:1px solid #444A51;color:#C3C8BE;border-radius:9px;padding:8px 4px;min-height:44px;font-size:12px;text-align:center}
   .tabs button[aria-current="true"]{background:#F2F3EF;color:var(--nori);border-color:#F2F3EF;font-weight:700}
 
   main{padding:12px 12px 8px;max-width:620px;margin:0 auto}
@@ -43,7 +43,8 @@
 
   .filter{display:flex;gap:6px;overflow-x:auto;padding:0 2px 10px;margin:0 -2px 4px;scrollbar-width:none}
   .filter::-webkit-scrollbar{display:none}
-  .filter button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 14px;font-size:13.5px;white-space:nowrap}
+  .filter button{flex:none;display:inline-flex;align-items:center;min-height:44px;max-width:min(190px,52vw);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:0 14px;font-size:13.5px;white-space:nowrap}
+  .filter .lbl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .filter button[aria-pressed="true"]{background:var(--nori);color:#F2F3EF;border-color:var(--nori);font-weight:700}
   .filter .rest{color:var(--ume);font-size:11px;margin-left:5px}
   .filter button[aria-pressed="true"] .rest{color:#F0A6AE}
@@ -57,7 +58,7 @@
   .ghead .next{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap}
   .rows{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 
-  .row{display:flex;align-items:center;gap:10px;padding:10px 11px;border-top:1px solid var(--line)}
+  .row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-top:1px solid var(--line)}
   .row:first-child{border-top:none}
   .row .info{flex:1;min-width:0}
   .row .nm{font-weight:600;font-size:15px;line-height:1.3}
@@ -65,11 +66,12 @@
   .row .meta{font-size:11.5px;color:var(--muted);margin-top:2px}
   .row .flag{font-size:12px;font-weight:700;margin-top:3px}
   .flag.need{color:var(--ume)} .flag.ok{color:var(--take)} .flag.none{color:var(--dashi)}
+  .flag.blank{display:none}
   .stepper{display:flex;align-items:center;gap:4px;flex:none}
-  .stepper button{width:38px;height:38px;border:1px solid var(--line);background:#F7F8F5;border-radius:8px;font-size:20px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+  .stepper button{width:44px;height:44px;border:1px solid var(--line);background:#F7F8F5;border-radius:8px;font-size:20px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
   .stepper button:active{background:#E6E8E2}
-  .stepper input{width:62px;height:38px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;padding:0 2px}
-  .stepper input::placeholder{color:#B7BCB2;font-weight:500;font-size:14px}
+  .stepper input{width:64px;height:44px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;padding:0 2px}
+  .stepper input::placeholder{color:var(--muted);font-weight:500;font-size:14px}
   .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .stepper input[type=number]{-moz-appearance:textfield}
 
@@ -78,7 +80,7 @@
   .bar .sum{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.35}
   .bar .sum b{display:block;font-size:14.5px;color:var(--ink);font-variant-numeric:tabular-nums}
   .go{flex:none;background:var(--nori);color:#F2F3EF;border:none;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:700;text-align:center}
-  .go:disabled{background:#B9BEB4;color:#EFF0EC}
+  .go:disabled{background:#C9CDC4;color:#3D4239}
 
   .slip{background:var(--card);border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);margin:0 0 18px;position:relative}
   .slip::before{content:"";position:absolute;left:-1px;right:-1px;top:-7px;height:8px;background:radial-gradient(circle at 5px 0, transparent 5px, var(--line) 5px, var(--line) 6px, transparent 6px) repeat-x;background-size:10px 8px}
@@ -99,7 +101,7 @@
   .acts a,.acts button{flex:1;text-align:center;text-decoration:none;border-radius:9px;padding:10px 8px;font-size:13.5px;font-weight:700;border:1px solid var(--nori)}
   .acts a{background:var(--nori);color:#F2F3EF}
   .acts a .ja{color:#B9BEB4}
-  .acts a[aria-disabled="true"]{background:#DDE0D9;color:#8C9289;border-color:var(--line);pointer-events:none}
+  .acts a[aria-disabled="true"]{background:#DDE0D9;color:#41473F;border-color:#AEB4A9;pointer-events:none}
   .acts button{background:transparent;color:var(--nori)}
   .acts button.solo{background:var(--nori);color:#F2F3EF}
   .acts button.solo .ja{color:#B9BEB4}
@@ -798,11 +800,11 @@ const nm = o => `<span class="th">${esc(o.name)}</span><span class="ja">${esc(o.
 /* ---------- フィルター ---------- */
 function filterBar(){
   if(state.suppliers.length < 2) return '';
-  let h = `<div class="filter"><button data-sf="" aria-pressed="${!state.supFilter}">${pick('all')}</button>`;
+  let h = `<div class="filter"><button data-sf="" aria-pressed="${!state.supFilter}"><span class="lbl">${pick('all')}</span></button>`;
   for(const s of state.suppliers){
     const r = restLabel(s);
     const label = state.lang === 'ja' ? (s.nameJa || s.name) : s.name;
-    h += `<button data-sf="${s.id}" aria-pressed="${state.supFilter === s.id}">${esc(label)}${r ? `<span class="rest">${esc(r)}</span>` : ''}</button>`;
+    h += `<button data-sf="${s.id}" aria-pressed="${state.supFilter === s.id}" title="${esc(label)}"><span class="lbl">${esc(label)}</span>${r ? `<span class="rest">${esc(r)}</span>` : ''}</button>`;
   }
   return h + '</div>';
 }
@@ -839,14 +841,17 @@ function renderCount(){
     for(const it of rows){
       const c = state.counts[it.id];
       const lots = orderLots(it);
-      let flag = `<div class="flag none">${pick('notFilled')}</div>`;
+      let flag = `<div class="flag blank">${pick('notFilled')}</div>`;
       if(lots !== null) flag = lots > 0
         ? `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${lotsText(it, lots).head}（${lotsText(it, lots).sub}）</div>`
         : `<div class="flag ok">${pick('enough')}</div>`;
       const s = supOf(it);
-      const sub = state.groupBy === 'sup'
-        ? `${L.parIs[state.lang==='ja'?1:0]}${fmt(it.par)} ${esc(it.unit)}・${esc(it.cat||'')}`
-        : `${L.parIs[state.lang==='ja'?1:0]}${fmt(it.par)} ${esc(it.unit)}・${esc(s ? (state.lang==='ja' ? (s.nameJa||s.name) : s.name) : '')}`;
+      /* 見出しに出ている情報はメタ行から省く（区分＝仕入先名の運用だと重複して2行に折り返すため） */
+      const supLabel = s ? (state.lang === 'ja' ? (s.nameJa || s.name) : s.name) : '';
+      const head = state.groupBy === 'sup' ? supLabel : (it.cat || '');
+      const tail = state.groupBy === 'sup' ? (it.cat || '') : supLabel;
+      const same = tail && head && tail.trim() === head.trim();
+      const sub = `${L.parIs[state.lang==='ja'?1:0]}${fmt(it.par)} ${esc(it.unit)}${(tail && !same) ? '・' + esc(tail) : ''}`;
       html += `<div class="row">
         <div class="info"><div class="nm">${nm(it)}</div><div class="meta num">${sub}</div>${flag}</div>
         <div class="stepper">
@@ -2002,7 +2007,7 @@ function updateRow(input){
   const it = state.items.find(x => x.id === input.dataset.count);
   const lots = orderLots(it);
   const flag = input.closest('.row').querySelector('.flag');
-  if(lots === null){ flag.className='flag none'; flag.textContent = pick('notFilled'); }
+  if(lots === null){ flag.className='flag blank'; flag.textContent = pick('notFilled'); }
   else if(lots > 0){
     const t = lotsText(it, lots);
     flag.className='flag need';

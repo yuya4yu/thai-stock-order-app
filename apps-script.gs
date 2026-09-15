@@ -225,6 +225,13 @@ function masterSheet_(ss) {
   return sh;
 }
 
+/* 更新日時。スプレッドシートが文字列を日付に変換してしまうことがあるため、
+   Date で返ってきた場合は「yyyy-MM-dd HH:mm」に整えてから返す。 */
+function stamp_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm');
+  return String(v || '');
+}
+
 function masterMeta_() {
   try {
     var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MASTER_SHEET);
@@ -232,7 +239,7 @@ function masterMeta_() {
     return {
       ok: true,
       rev: Number(sh.getRange(1, 2).getValue()) || 0,
-      updatedAt: String(sh.getRange(2, 2).getValue() || ''),
+      updatedAt: stamp_(sh.getRange(2, 2).getValue()),
       by: String(sh.getRange(3, 2).getValue() || '')
     };
   } catch (err) {
