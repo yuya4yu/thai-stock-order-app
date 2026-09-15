@@ -16,7 +16,8 @@ const HEADERS = [
   '品目ID', '品目/รายการ', '品目(JA)', '区分/หมวด', '単位/หน่วย',
   '前回在庫/สต๊อกครั้งก่อน', '入荷/รับเข้า', '今回在庫/สต๊อกวันนี้',
   '使用量(概算)/ใช้ไป', '基準/มาตรฐาน',
-  '発注数/สั่งซื้อ', '単価/ราคาต่อหน่วย', '金額/มูลค่า', '通貨/สกุลเงิน'
+  '発注数/สั่งซื้อ', '単価/ราคาต่อหน่วย', '金額/มูลค่า', '通貨/สกุลเงิน',
+  'ロット数/จำนวนล็อต', '入数/ปริมาณต่อล็อต', 'ロット単価/ราคาต่อล็อต', 'ロット単位/หน่วยล็อต'
 ];
 
 function doPost(e) {
@@ -42,7 +43,8 @@ function doPost(e) {
       r.itemId, r.item, r.itemJa, r.category, r.unit,
       r.prevStock, r.received, r.stock,
       r.used, r.par,
-      r.order, r.price, r.amount, r.currency
+      r.order, r.price, r.amount, r.currency,
+      r.lots, r.lotSize, r.lotPrice, r.lotUnit
     ]));
     if (rows.length) {
       sh.getRange(sh.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
@@ -294,6 +296,13 @@ function getSheet_(ss, name) {
     sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
     sh.setFrozenRows(1);
     sh.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold');
+    return sh;
+  }
+  // 列を増やしたとき、既にあるシートの見出し行に足りないぶんだけ書き足す
+  var width = sh.getLastColumn();
+  if (width < HEADERS.length) {
+    var add = HEADERS.slice(width);
+    sh.getRange(1, width + 1, 1, add.length).setValues([add]).setFontWeight('bold');
   }
   return sh;
 }

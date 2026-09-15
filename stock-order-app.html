@@ -89,6 +89,7 @@
   .slip .closed{width:100%;font-size:12px;color:#7A5A12;background:#FBF3E3;border:1px solid #E6D3A8;border-radius:7px;padding:7px 9px;margin-top:2px}
   .line{display:flex;gap:10px;padding:9px 13px;border-bottom:1px dashed var(--line);align-items:baseline}
   .line .n{flex:1} .line .q{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .line .q .qsub{display:block;font-weight:400;font-size:11px;color:var(--muted)}
   .line .p{width:86px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
   .line .sub{font-size:11px;color:var(--muted);margin-top:1px}
   .slip .foot{display:flex;align-items:center;padding:11px 13px;gap:10px}
@@ -225,6 +226,20 @@
 const KEY = 'stock-order-app-v3';
 const WD_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
 const WD_JA = ['日','月','火','水','木','金','土'];
+/* ロットの呼び名。品目には key を保存し、表示だけ言語に合わせる。
+   未設定のときは「ล็อต / ロット」と出す（誤った呼び名を入れないための既定）。 */
+const LOT_UNITS = [
+  {k:'bag',    th:'ถุง',      ja:'袋'},
+  {k:'box',    th:'กล่อง',    ja:'箱'},
+  {k:'pack',   th:'แพ็ค',     ja:'パック'},
+  {k:'case',   th:'ลัง',      ja:'ケース'},
+  {k:'bottle', th:'ขวด',      ja:'本'},
+  {k:'can',    th:'กระป๋อง',  ja:'缶'},
+  {k:'piece',  th:'ชิ้น',      ja:'個'},
+  {k:'tray',   th:'ถาด',      ja:'トレー'},
+  {k:'sheet',  th:'แผ่น',     ja:'枚'},
+  {k:'kg',     th:'กก.',      ja:'kg'}
+];
 const DEFAULT_UNITS = ['g','kg','個','パック','袋','本','枚','缶','箱','ℓ','ml'];
 
 /* ---------- 保存領域 ----------
@@ -252,6 +267,11 @@ const L = {
   enough:['เพียงพอ','足りています'],
   orderN:['สั่ง ','発注 '],
   parIs:['มาตรฐาน ','基準 '],
+  lotGeneric:['ล็อต','ロット'],
+  fLotSize:['ปริมาณต่อ 1 ล็อต (เช่น 1 ถุง = 1000 g)','1ロットの量（例：1袋＝1000g）'],
+  fLotUnit:['เรียกล็อตว่าอะไร','ロットの呼び名'],
+  fLotPrice:['ราคาต่อ 1 ล็อต','1ロットの価格'],
+  lotHelp:['สั่งเป็นล็อต เช่น มาตรฐาน 1000 g ล็อตละ 1000 g เหลือ 300 g จะสั่ง 1 ถุง','発注はロット単位です。例：基準1000g・1ロット1000g・在庫300g → 1袋を発注'],
   filled:[' รายการที่กรอกแล้ว',' 品目 入力済み'],
   shortN:[' รายการขาด・ประมาณ ',' 品目が不足・概算 '],
   toResult:['ดูรายการสั่งซื้อ','発注リストへ'],
@@ -371,6 +391,7 @@ const L = {
   sugSafety:['เผื่อความปลอดภัย (%)','安全率（%）'],
   sugCalc:['คำนวณข้อเสนอ','提案を計算する'],
   sugHowTitle:['ตัวเลข 3 ตัวนี้คืออะไร','この3つの数字の意味'],
+  sugParOnly:['แนะนำเฉพาะสต๊อกมาตรฐาน ปริมาณต่อล็อตขึ้นกับซัพพลายเออร์ จึงไม่แนะนำให้','提案するのは基準在庫だけです。1ロットの量は仕入先の売り方で決まるため提案しません'],
   sugFormula:['สต๊อกมาตรฐาน ＝ ใช้ต่อวัน ×（lead time ＋ รอบการสั่ง）×（1 ＋ เผื่อ %）','基準在庫 ＝ 1日の使用量 ×（リードタイム ＋ 発注サイクル）×（1 ＋ 安全率）'],
   sugH1:['รอบการสั่ง (วัน)：สั่งทุกกี่วัน สั่งทุกวัน＝1、สัปดาห์ละ 2 ครั้ง＝3〜4','発注サイクル（日）：何日に1回発注するか。毎日なら1、週2回なら3〜4'],
   sugH2:['lead time (วัน)：สั่งแล้วของถึงในกี่วัน ตั้งที่แต่ละซัพพลายเออร์ ถ้าไม่ได้ตั้งจะนับเป็น 1 วัน','リードタイム（日）：発注してから届くまでの日数。仕入先ごとに設定。未設定なら1日として計算'],
@@ -691,13 +712,39 @@ const dateLabel = d => d ? `${d.getDate()}/${d.getMonth()+1}(${wd(d.getDay())})`
 /* ---------- 計算 ---------- */
 const num = v => (v === '' || v === null || v === undefined || isNaN(v)) ? null : Number(v);
 const round2 = n => Math.round(n*100)/100;
-function orderQty(item){
+/* ---------- ロット（入数）まわり ----------
+   lot  … 1ロットの量。単位は品目の unit（例：1袋＝1000g なら 1000）
+   price… 1ロットの価格（1単位あたりではない）
+   発注は必ずロット単位で行うため、まずロット数を出し、そこから量と金額を求める。 */
+const lotSize = it => { const v = Number(it.lot); return v > 0 ? v : 1; };
+/* 発注ロット数。未カウントなら null、足りていれば 0 */
+function orderLots(item){
   const c = num(state.counts[item.id]);
   if(c === null) return null;
   const short = round2(Number(item.par) - c);
   if(short <= 0) return 0;
-  const lot = Number(item.lot) > 0 ? Number(item.lot) : 1;
-  return round2(Math.ceil((short - 1e-9)/lot)*lot);
+  return Math.ceil((short - 1e-9) / lotSize(item));
+}
+/* 発注量（品目の単位での合計）。シートと納品画面はこの値を使う */
+function orderQty(item){
+  const n = orderLots(item);
+  return n === null ? null : round2(n * lotSize(item));
+}
+/* 概算金額＝ロット数 × 1ロットの価格 */
+const lotsAmount = (item, lots) => round2(Number(lots || 0) * Number(item.price || 0));
+const orderAmount = item => lotsAmount(item, orderLots(item) || 0);
+/* ロットの呼び名。未設定なら「ล็อต / ロット」 */
+function lotName(it){
+  const u = LOT_UNITS.find(x => x.k === (it && it.lotUnit));
+  const th = u ? u.th : L.lotGeneric[0];
+  const ja = u ? u.ja : L.lotGeneric[1];
+  return state.lang === 'ja' ? ja : (state.lang === 'th' ? th : th + '/' + ja);
+}
+/* 「2 ถุง/袋」と、その内訳「2,000 g」。1ロット＝1単位のときは内訳を出さない */
+function lotsText(it, lots){
+  const total = round2(Number(lots || 0) * lotSize(it));
+  return {head: fmt(lots) + ' ' + lotName(it),
+          sub: lotSize(it) === 1 ? esc(it.unit) : fmt(total) + ' ' + esc(it.unit)};
 }
 const money = n => state.currency + Math.round(n).toLocaleString('en-US');
 const fmt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits:2});
@@ -720,7 +767,7 @@ function summary(){
   for(const it of visibleItems()){
     const q = orderQty(it);
     if(q === null){ blank++; continue; }
-    if(q > 0){ need++; amount += q*Number(it.price||0); }
+    if(q > 0){ need++; amount += orderAmount(it); }
   }
   const list = visibleItems();
   return {need, amount, blank, counted:list.length - blank, total:list.length};
@@ -770,10 +817,10 @@ function renderCount(){
     html += `<section class="group">${head}<div class="rows">`;
     for(const it of rows){
       const c = state.counts[it.id];
-      const q = orderQty(it);
+      const lots = orderLots(it);
       let flag = `<div class="flag none">${pick('notFilled')}</div>`;
-      if(q !== null) flag = q > 0
-        ? `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${fmt(q)} ${esc(it.unit)}</div>`
+      if(lots !== null) flag = lots > 0
+        ? `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${lotsText(it, lots).head}（${lotsText(it, lots).sub}）</div>`
         : `<div class="flag ok">${pick('enough')}</div>`;
       const s = supOf(it);
       const sub = state.groupBy === 'sup'
@@ -802,7 +849,7 @@ function renderCount(){
 /* ============ 発注リスト ============ */
 function renderResult(){
   const s = summary();
-  const rows = visibleItems().map(it => ({it, q:orderQty(it)})).filter(r => r.q > 0);
+  const rows = visibleItems().map(it => ({it, lots:orderLots(it)})).filter(r => r.lots > 0);
   let html = filterBar();
 
   if(!rows.length){
@@ -818,7 +865,7 @@ function renderResult(){
   const groups = [...new Set(rows.map(r => r.it.supId || ''))].map(id => {
     const sup = state.suppliers.find(x => x.id === id) || null;
     const list = rows.filter(r => (r.it.supId||'') === id);
-    return {sup, list, ok: sup ? canOrderToday(sup) : true, sum:list.reduce((a,r) => a + r.q*Number(r.it.price||0), 0)};
+    return {sup, list, ok: sup ? canOrderToday(sup) : true, sum:list.reduce((a,r) => a + lotsAmount(r.it, r.lots), 0)};
   });
   groups.sort((a,b) => b.ok - a.ok);
   let todaySum = 0, laterSum = 0, shownLater = false;
@@ -834,10 +881,11 @@ function renderResult(){
       ${g.ok ? '' : `<div class="closed">${esc(closedReason(g.sup))} → ${L.nextOrderDay[state.lang==='ja'?1:0]}${dateLabel(nextOrderDate(g.sup))}</div>`}</div>`;
     for(const r of g.list){
       const c = num(state.counts[r.it.id]);
+      const t = lotsText(r.it, r.lots);
       html += `<div class="line">
         <div class="n">${nm(r.it)}<div class="sub num">${L.stock[state.lang==='ja'?1:0]}${fmt(c)} / ${L.parIs[state.lang==='ja'?1:0]}${fmt(r.it.par)} ${esc(r.it.unit)}</div></div>
-        <div class="q num">${fmt(r.q)} ${esc(r.it.unit)}</div>
-        <div class="p num">${money(r.q*Number(r.it.price||0))}</div></div>`;
+        <div class="q num">${t.head}<span class="qsub">${t.sub}</span></div>
+        <div class="p num">${money(lotsAmount(r.it, r.lots))}</div></div>`;
     }
     html += `<div class="foot"><span class="lbl">${pick('subtotal')}</span><span class="amt">${money(g.sum)}</span></div>
       <div class="acts">
@@ -859,7 +907,7 @@ function renderResult(){
       copy([
         `【สั่งซื้อ / 発注】${name}`,
         `${state.store}  ${dateStr()}`,
-        ...g.list.map(r => `・${r.it.name}${r.it.nameJa ? ' ('+r.it.nameJa+')' : ''}  ${fmt(r.q)} ${r.it.unit}`),
+        ...g.list.map(r => `・${r.it.name}${r.it.nameJa ? ' ('+r.it.nameJa+')' : ''}  ${fmt(r.lots)} ${lotName(r.it)}（${fmt(round2(r.lots*lotSize(r.it)))} ${r.it.unit}）`),
         `${L.subtotal[0]} ${money(g.sum)}`,
         g.ok ? '' : `※${closedReason(g.sup)} → ${dateLabel(nextOrderDate(g.sup))}`
       ].filter(Boolean).join('\n'));
@@ -1124,9 +1172,9 @@ function suggestFor(it){
   if(!st || !(st.perDay > 0)) return null;
   const cycle = Number(state.cycle) > 0 ? Number(state.cycle) : 3;
   const safety = 1 + (Number(state.safety) || 0) / 100;
+  /* 1ロットの量は仕入先の売り方で決まるので提案しない。基準在庫だけを出す。 */
   return {perDay: st.perDay, n: st.n,
-    par: niceRound(st.perDay * (leadOf(it) + cycle) * safety),
-    lot: niceRound(st.perDay * cycle)};
+    par: niceRound(st.perDay * (leadOf(it) + cycle) * safety)};
 }
 function renderSuggest(){
   const box = document.getElementById('sugBox');
@@ -1135,11 +1183,11 @@ function renderSuggest(){
   if(!rows.length){ box.innerHTML = `<div class="warn">${pick('sugNoHist')}</div>`; return; }
   let h = '<div class="sug">';
   for(const r of rows){
-    const changed = Number(r.it.par) !== r.sg.par || Number(r.it.lot) !== r.sg.lot;
+    const changed = Number(r.it.par) !== r.sg.par;
     h += `<label class="sugrow">
       <input type="checkbox" data-sug="${r.it.id}" ${changed ? 'checked' : ''}>
       <span class="n">${nm(r.it)}<span class="d num">${fmt(round2(r.sg.perDay))} ${esc(r.it.unit)}${L.sugPerDay[state.lang==='ja'?1:0]}・${r.sg.n}${L.sugTimes[state.lang==='ja'?1:0]}</span></span>
-      <span class="v">${L.sugPar[state.lang==='ja'?1:0]}<span class="old">${fmt(r.it.par)}</span><b>${fmt(r.sg.par)}</b><br>${L.sugLot[state.lang==='ja'?1:0]}<span class="old">${fmt(r.it.lot)}</span><b>${fmt(r.sg.lot)}</b></span>
+      <span class="v">${L.sugPar[state.lang==='ja'?1:0]}<span class="old">${fmt(r.it.par)}</span><b>${fmt(r.sg.par)}</b></span>
     </label>`;
   }
   box.innerHTML = h + `</div><button class="addbtn" id="sugApply">${one('sugApply')}</button>`;
@@ -1150,7 +1198,6 @@ function renderSuggest(){
       const sg = it ? suggestFor(it) : null;
       if(!sg || !(sg.par > 0)) return;
       it.par = sg.par;
-      if(sg.lot > 0) it.lot = sg.lot;
       n++;
     });
     save(); renderMaster(); toast(pick('sugApplied').replace(/%n/g, n));
@@ -1177,9 +1224,13 @@ function buildRows(){
   const d = new Date();
   return state.items.filter(it => num(state.counts[it.id]) !== null).map(it => {
     const s = supOf(it);
-    const q = orderQty(it) || 0;
+    const lots = orderLots(it) || 0;
+    const q = round2(lots * lotSize(it));
     const u = usedQty(it);
     const p = state.prev[it.id];
+    /* シートの「単価」列は1単位あたりに直して入れる（発注数×単価＝金額 が成り立つように）。
+       ロット数・入数・ロット単価は末尾の列に別で残す。 */
+    const unitPrice = round2(Number(it.price || 0) / lotSize(it));
     return {
       date: ymd(d), time: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,
       store: state.store,
@@ -1187,7 +1238,8 @@ function buildRows(){
       itemId: it.id, item: it.name, itemJa: it.nameJa || '', unit: it.unit, category: it.cat || '',
       prevStock: p ? p.stock : '', received: p ? receivedOf(p) : '',
       stock: num(state.counts[it.id]), used: u === null ? '' : u,
-      par: it.par, order: q, price: it.price, amount: round2(q*Number(it.price||0)), currency: state.currency
+      par: it.par, order: q, price: unitPrice, amount: lotsAmount(it, lots), currency: state.currency,
+      lots, lotSize: lotSize(it), lotPrice: Number(it.price || 0), lotUnit: lotName(it)
     };
   });
 }
@@ -1205,13 +1257,13 @@ function bothReason(sup){
   return (th && ja) ? `${th} / ${ja}` : (th || ja);
 }
 function buildLineText(){
-  const rows = state.items.map(it => ({it, q:orderQty(it)})).filter(r => r.q > 0);
+  const rows = state.items.map(it => ({it, lots:orderLots(it)})).filter(r => r.lots > 0);
   if(!rows.length) return '';
   const groups = [...new Set(rows.map(r => r.it.supId || ''))].map(id => {
     const sup = state.suppliers.find(x => x.id === id) || null;
     const list = rows.filter(r => (r.it.supId||'') === id);
     return {sup, list, ok: sup ? canOrderToday(sup) : true,
-            sum:list.reduce((a,r) => a + r.q*Number(r.it.price||0), 0)};
+            sum:list.reduce((a,r) => a + lotsAmount(r.it, r.lots), 0)};
   });
   groups.sort((a,b) => b.ok - a.ok);
 
@@ -1228,7 +1280,13 @@ function buildLineText(){
     if(!g.ok && !shownLater){ shownLater = true; out.push('', `― ${L.orderLater[0]} / ${L.orderLater[1]} ―`); }
     out.push('', `■ ${g.sup ? lineNm(g.sup) : `${L.noSupplier[0]} / ${L.noSupplier[1]}`}`);
     if(!g.ok) out.push(`　（${bothReason(g.sup)} → ${L.nextOrderDay[0].trim()} / ${L.nextOrderDay[1].trim()} ${dateLabel(nextOrderDate(g.sup))}）`);
-    for(const r of g.list) out.push(`・${lineNm(r.it)}　${fmt(r.q)} ${r.it.unit}　${money(r.q*Number(r.it.price||0))}`);
+    for(const r of g.list){
+      const total = round2(r.lots * lotSize(r.it));
+      const amt = lotsAmount(r.it, r.lots);
+      out.push(lotSize(r.it) === 1
+        ? `・${lineNm(r.it)}　${fmt(r.lots)} ${lotName(r.it)}　${money(amt)}`
+        : `・${lineNm(r.it)}　${fmt(r.lots)} ${lotName(r.it)}（${fmt(total)} ${r.it.unit}）　${money(amt)}`);
+    }
     out.push(`　${L.subtotal[0]} / ${L.subtotal[1]}　${money(g.sum)}`);
   });
   out.push('', `${L.lineTotal[0]} / ${L.lineTotal[1]}　${money(today)}`);
@@ -1408,6 +1466,7 @@ function renderMaster(){
       <label>${two('sugCycle')}<input type="number" step="1" min="1" inputmode="numeric" id="setCycle" value="${Number(state.cycle) || 3}"></label>
       <label>${two('sugSafety')}<input type="number" step="5" min="0" inputmode="numeric" id="setSafety" value="${Number(state.safety) || 0}"></label>
       <p class="cap">${pick('histCount').replace(/%n/g, state.history.length)}</p>
+      <p class="cap">${pick('sugParOnly')}</p>
     </div>
     <details class="mcard howto">
       <summary><span class="nmwrap">${two('sugHowTitle')}</span></summary>
@@ -1490,9 +1549,14 @@ function renderMaster(){
         <label>${two('fUnit')}<select data-f="unit" data-id="${it.id}">
           ${Array.from(new Set([...(state.units||[]), it.unit].filter(Boolean))).map(u => `<option value="${esc(u)}" ${u===it.unit?'selected':''}>${esc(u)}</option>`).join('')}
         </select></label>
-        <label>${two('fPar')}<input type="number" step="any" inputmode="decimal" data-f="par" data-id="${it.id}" value="${it.par}"></label>
-        <label>${two('fLot')}<input type="number" step="any" inputmode="decimal" data-f="lot" data-id="${it.id}" value="${it.lot}"></label>
-        <label class="wide">${two('fPrice')} (${esc(state.currency)})<input type="number" step="any" inputmode="decimal" data-f="price" data-id="${it.id}" value="${it.price}"></label>
+        <label>${two('fPar')} (${esc(it.unit)})<input type="number" step="any" inputmode="decimal" data-f="par" data-id="${it.id}" value="${it.par}"></label>
+        <label>${two('fLotSize')} (${esc(it.unit)})<input type="number" step="any" inputmode="decimal" data-f="lot" data-id="${it.id}" value="${it.lot}"></label>
+        <label>${two('fLotUnit')}<select data-f="lotUnit" data-id="${it.id}">
+          <option value="" ${!it.lotUnit ? 'selected' : ''}>${L.lotGeneric[0]}／${L.lotGeneric[1]}</option>
+          ${LOT_UNITS.map(u => `<option value="${u.k}" ${it.lotUnit===u.k?'selected':''}>${u.th}／${u.ja}</option>`).join('')}
+        </select></label>
+        <label>${two('fLotPrice')} (${esc(state.currency)})<input type="number" step="any" inputmode="decimal" data-f="price" data-id="${it.id}" value="${it.price}"></label>
+        <p class="cap wide">${pick('lotHelp')}</p>
         <button class="del" data-del="${it.id}">${one('delItem')}</button>
       </div></details>`;
   }
@@ -1661,7 +1725,7 @@ function renderMaster(){
     const id = 'i' + Date.now().toString(36);
     const sid = state.supFilter || (state.suppliers[0]||{}).id || '';
     const sup = state.suppliers.find(x => x.id === sid);
-    state.items.push({id, cat: sup ? sup.name : '', name:'รายการใหม่', nameJa:'新しい品目', unit:(state.units||['g'])[0], par:1, lot:1, price:0, supId: sid});
+    state.items.push({id, cat: sup ? sup.name : '', name:'รายการใหม่', nameJa:'新しい品目', unit:(state.units||['g'])[0], par:1, lot:1, lotUnit:'', price:0, supId: sid});
     save(); renderMaster();
     const cards = app.querySelectorAll('.mcard');
     const el = cards[cards.length-1];
@@ -1798,10 +1862,14 @@ app.addEventListener('click', e => {
 });
 function updateRow(input){
   const it = state.items.find(x => x.id === input.dataset.count);
-  const q = orderQty(it);
+  const lots = orderLots(it);
   const flag = input.closest('.row').querySelector('.flag');
-  if(q === null){ flag.className='flag none'; flag.textContent = pick('notFilled'); }
-  else if(q > 0){ flag.className='flag need'; flag.textContent = `${L.orderN[state.lang==='ja'?1:0]}${fmt(q)} ${it.unit}`; }
+  if(lots === null){ flag.className='flag none'; flag.textContent = pick('notFilled'); }
+  else if(lots > 0){
+    const t = lotsText(it, lots);
+    flag.className='flag need';
+    flag.textContent = `${L.orderN[state.lang==='ja'?1:0]}${t.head}（${t.sub}）`;
+  }
   else { flag.className='flag ok'; flag.textContent = pick('enough'); }
   const s = summary();
   const sum = bar.querySelector('.sum');
