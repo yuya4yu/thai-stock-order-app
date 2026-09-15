@@ -426,6 +426,19 @@ const L = {
   recOkLocal:['บันทึกแล้ว เมื่อของมาถึงให้ไปที่หน้ารับของ','記録しました。納品が届いたら「納品」画面で数量を入力してください'],
   recOkSheet:['บันทึกลงเครื่องและชีตแล้ว','端末とシートに記録しました'],
   recOkOffline:['บันทึกลงเครื่องแล้ว แต่ส่งขึ้นชีตไม่สำเร็จ ส่งใหม่ได้ภายหลัง','端末に記録しました。シートへの送信は失敗したので、あとで再送できます'],
+  recOkLine:['บันทึกลงชีตและส่ง LINE แล้ว','シートに記録し、LINEに送りました'],
+  lineSect:['แจ้งเตือน LINE','LINE通知'],
+  lineDesc:['เมื่อกด "บันทึกการสั่งซื้อ" จะส่งรายการสั่งซื้อของวันนี้เข้า LINE ทุกคนที่เพิ่มบัญชีทางการเป็นเพื่อนจะเห็นข้อความเดียวกัน','「発注を記録する」を押すと、その日の発注内容をLINEに送ります。公式アカウントを友だち追加した人は全員が同じ内容を見られます'],
+  lineOn:['ส่ง LINE เมื่อบันทึกการสั่งซื้อ','発注を記録したときLINEに送る'],
+  lineTestBtn:['ส่งข้อความทดสอบ','テストメッセージを送る'],
+  lineTesting:['กำลังส่ง…','送信中…'],
+  lineTestOk:['ส่งแล้ว กรุณาตรวจสอบใน LINE','送信しました。LINEを確認してください'],
+  lineTestNg:['ส่งไม่สำเร็จ ','送信できませんでした '],
+  lineNoUrl:['กรุณาตั้งค่า URL ของ Apps Script ก่อน','先にApps ScriptのURLを設定してください'],
+  lineNote:['ต้องตั้งค่าโทเคนของ LINE ไว้ใน Apps Script ก่อน (ดู google-sheet-setup.md)','先にApps Script側でLINEのトークンを設定しておく必要があります（google-sheet-setup.md 参照）'],
+  lineTitle:['รายการสั่งซื้อวันนี้','本日の発注'],
+  lineStore:['สาขา','店舗'],
+  lineTotal:['รวมทั้งหมด','合計'],
   outboxN:['มีข้อมูลที่ยังไม่ได้ส่งขึ้นชีต %n ครั้ง','シートに未送信のデータが%n件あります'],
   outboxSend:['ส่งข้อมูลที่ค้างอยู่','未送信分を送る'],
   outboxOk:['ส่งข้อมูลที่ค้างอยู่แล้ว','未送信分を送信しました'],
@@ -547,7 +560,7 @@ let state = {
   items: SAMPLE_ITEMS.map(o => ({...o})),
   units: [...DEFAULT_UNITS],
   counts:{}, prev:{}, groupBy:'sup', supFilter:null,
-  history:[], cycle:3, safety:20, outbox:[], pin:null, hol:[]
+  history:[], cycle:3, safety:20, outbox:[], pin:null, hol:[], lineOn:true
 };
 let view = 'count';
 
@@ -1178,6 +1191,67 @@ function buildRows(){
     };
   });
 }
+/* ---------- LINEに送る本文 ----------
+   発注リスト画面と同じ組み方で、仕入先ごとの品目・数量・金額・小計、最後に合計を並べる。
+   画面の絞り込み（チップ）に関わらず、全品目を対象にする。
+   表示言語の設定に関わらず、タイ語と日本語を併記する。 */
+const lineNm = o => (o && o.nameJa) ? `${o.name} / ${o.nameJa}` : ((o && o.name) || '-');
+/* 発注できない理由はタイ語・日本語の両方を出したいので、一時的に言語を切り替えて2回読む */
+function bothReason(sup){
+  const cur = state.lang;
+  state.lang = 'th'; const th = closedReason(sup);
+  state.lang = 'ja'; const ja = closedReason(sup);
+  state.lang = cur;
+  return (th && ja) ? `${th} / ${ja}` : (th || ja);
+}
+function buildLineText(){
+  const rows = state.items.map(it => ({it, q:orderQty(it)})).filter(r => r.q > 0);
+  if(!rows.length) return '';
+  const groups = [...new Set(rows.map(r => r.it.supId || ''))].map(id => {
+    const sup = state.suppliers.find(x => x.id === id) || null;
+    const list = rows.filter(r => (r.it.supId||'') === id);
+    return {sup, list, ok: sup ? canOrderToday(sup) : true,
+            sum:list.reduce((a,r) => a + r.q*Number(r.it.price||0), 0)};
+  });
+  groups.sort((a,b) => b.ok - a.ok);
+
+  const out = [
+    `${L.lineTitle[0]} / ${L.lineTitle[1]}`,
+    `${L.lineStore[0]} / ${L.lineStore[1]}：${state.store || '-'}`,
+    dateStr()
+  ];
+  const anyToday = groups.some(g => g.ok);
+  let today = 0, later = 0, shownLater = false;
+  groups.forEach((g, gi) => {
+    if(g.ok) today += g.sum; else later += g.sum;
+    if(anyToday && gi === 0) out.push('', `― ${L.orderToday[0]} / ${L.orderToday[1]} ―`);
+    if(!g.ok && !shownLater){ shownLater = true; out.push('', `― ${L.orderLater[0]} / ${L.orderLater[1]} ―`); }
+    out.push('', `■ ${g.sup ? lineNm(g.sup) : `${L.noSupplier[0]} / ${L.noSupplier[1]}`}`);
+    if(!g.ok) out.push(`　（${bothReason(g.sup)} → ${L.nextOrderDay[0].trim()} / ${L.nextOrderDay[1].trim()} ${dateLabel(nextOrderDate(g.sup))}）`);
+    for(const r of g.list) out.push(`・${lineNm(r.it)}　${fmt(r.q)} ${r.it.unit}　${money(r.q*Number(r.it.price||0))}`);
+    out.push(`　${L.subtotal[0]} / ${L.subtotal[1]}　${money(g.sum)}`);
+  });
+  out.push('', `${L.lineTotal[0]} / ${L.lineTotal[1]}　${money(today)}`);
+  if(later) out.push(`${L.laterTotal[0]} / ${L.laterTotal[1]}　${money(later)}`);
+  out.push('', L.priceNote[0], L.priceNote[1]);
+  return out.join('\n');
+}
+/* 設定画面から、LINEに1通だけテストを送って結果を確かめる。
+   応答を読みたいので、書き込み（POST）ではなく履歴の復元と同じ JSONP で呼ぶ。 */
+async function lineTest(btn){
+  if(!state.sheetUrl){ toast(pick('lineNoUrl')); return; }
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = pick('lineTesting');
+  try{
+    const r = await jsonp(state.sheetUrl, {mode:'linetest'}, 25000);
+    if(r && r.ok) toast(pick('lineTestOk'));
+    else toast(pick('lineTestNg') + String((r && r.error) || '').slice(0, 90));
+  }catch(e){
+    toast(pick('lineTestNg'));
+  }finally{
+    btn.disabled = false; btn.textContent = label;
+  }
+}
 function snapshot(){
   const d = new Date();
   const today = ymd(d);
@@ -1259,8 +1333,12 @@ function bindSheet(){
     let msg = 'recOkLocal';
     try{
       if(state.sheetUrl){
-        const payload = JSON.stringify({store:state.store, batchId:newBatchId(), rows});
-        if(await postRows(payload)) msg = 'recOkSheet';
+        /* LINE通知が有効なら本文も一緒に送る。発注が0件のときは本文が空になり、LINEには飛ばない。
+           未送信キューに積んだ場合も同じ payload を送り直すので、あとからLINEに届く。
+           同じ batchId は Apps Script 側で弾かれるため、再送しても二重には飛ばない。 */
+        const lineText = state.lineOn === false ? '' : buildLineText();
+        const payload = JSON.stringify({store:state.store, batchId:newBatchId(), rows, lineText});
+        if(await postRows(payload)) msg = lineText ? 'recOkLine' : 'recOkSheet';
         else { state.outbox = [...(state.outbox || []), payload].slice(-20); msg = 'recOkOffline'; }
       }
       state.recordedSig = countsSig();
@@ -1296,6 +1374,16 @@ function renderMaster(){
     <p class="cap verrow"><span class="num">${pick('fVersion')}：${esc(buildStamp())}</span>
       <button type="button" id="chkUpd">${pick('updCheck')}</button></p>
   </div>`;
+
+  html += `<p class="secttl">${one('lineSect')}</p>
+    <div class="setrow">
+      <p class="cap" style="margin:0">${pick('lineDesc')}</p>
+      <label class="wide" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" id="setLineOn" style="width:18px;height:18px;flex:none" ${state.lineOn === false ? '' : 'checked'}>
+        <span>${pick('lineOn')}</span></label>
+      <p class="cap">${pick('lineNote')}</p>
+    </div>
+    <button class="addbtn" id="lineTestBtn" style="margin-bottom:16px">${one('lineTestBtn')}</button>`;
 
   html += `<p class="secttl">${one('lockSect')}</p>
     <div class="setrow">
@@ -1424,6 +1512,8 @@ function renderMaster(){
   document.getElementById('setSafety').oninput = e => { state.safety = e.target.value === '' ? 0 : Number(e.target.value); save(); };
   document.getElementById('sugCalc').onclick = renderSuggest;
   document.getElementById('restHist').onclick = e => restoreHistory(e.currentTarget);
+  document.getElementById('setLineOn').onchange = e => { state.lineOn = e.target.checked; save(); };
+  document.getElementById('lineTestBtn').onclick = e => lineTest(e.currentTarget);
 
   document.getElementById('holAdd').onclick = () => {
     const d = document.getElementById('holD').value;
