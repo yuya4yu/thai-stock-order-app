@@ -29,6 +29,11 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
+    // マスタの配布（品目・仕入先・単位・祝日）。発注の記録とは別扱い
+    if (data.type === 'master') {
+      return json_(masterWrite_(data.data, data.by));
+    }
+
     // 同じ送信を二重に記録しない（通信の再送やボタンの二度押し対策）
     // LINEへの送信もここで止まるので、再送しても二重には飛ばない。
     if (data.batchId && isDuplicate_(data.batchId)) {
@@ -73,6 +78,8 @@ function doPost(e) {
 /**
  * 読み出し口。
  *   ?mode=history&store=<店舗名>&days=28  … その店舗の使用履歴と、直近の在庫・発注内容を返す
+ *   ?mode=masterrev                       … 共有マスタの版だけを返す（起動時の確認用・軽い）
+ *   ?mode=master                          … 共有マスタ本体（品目・仕入先・単位・祝日）を返す
  *   ?mode=linetest                        … LINEへテストメッセージを送り、結果を返す
  *   ?mode=linestatus                      … LINEのトークンが設定されているかだけを返す
  *   （引数なし）                          … 疎通確認用の {"ok":true,"message":"ready"}
@@ -83,6 +90,12 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.mode === 'history') {
     return reply_(p.callback, history_(String(p.store || ''), Number(p.days) || 28));
+  }
+  if (p.mode === 'masterrev') {
+    return reply_(p.callback, masterMeta_());
+  }
+  if (p.mode === 'master') {
+    return reply_(p.callback, masterFull_());
   }
   if (p.mode === 'linetest') {
     var r;
@@ -184,6 +197,93 @@ function reply_(callback, obj) {
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ============ マスタの共有 ============
+ *
+ * 品目・仕入先・単位・祝日を MASTER シートに1本だけ置き、全端末が同じものを使う。
+ * 端末は起動時に版（rev）だけを見にきて、上がっていれば本体を取りに来る。
+ * 配る（書き込む）のは、設定画面で「全端末に配る」を押したときだけ。
+ *
+ * シートの形：
+ *   A1 rev        B1 版番号（配るたびに1つ増える）
+ *   A2 updatedAt  B2 更新日時
+ *   A3 by         B3 配った端末の店舗名
+ *   A4 json       B4以降 JSONを4万文字ずつに分けたもの（1セルの上限が5万文字のため）
+ */
+var MASTER_SHEET = 'MASTER';
+var MASTER_CHUNK = 40000;
+
+function masterSheet_(ss) {
+  var sh = ss.getSheetByName(MASTER_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(MASTER_SHEET);
+    sh.getRange(1, 1, 4, 1).setValues([['rev'], ['updatedAt'], ['by'], ['json']]);
+    sh.getRange(1, 1, 4, 1).setFontWeight('bold');
+    sh.setColumnWidth(2, 400);
+  }
+  return sh;
+}
+
+function masterMeta_() {
+  try {
+    var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MASTER_SHEET);
+    if (!sh) return { ok: true, rev: 0, updatedAt: '', by: '' };
+    return {
+      ok: true,
+      rev: Number(sh.getRange(1, 2).getValue()) || 0,
+      updatedAt: String(sh.getRange(2, 2).getValue() || ''),
+      by: String(sh.getRange(3, 2).getValue() || '')
+    };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function masterFull_() {
+  try {
+    var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MASTER_SHEET);
+    if (!sh) return { ok: true, rev: 0, data: null };
+    var meta = masterMeta_();
+    if (!meta.rev) return { ok: true, rev: 0, data: null };
+
+    var last = sh.getLastRow();
+    var parts = [];
+    if (last >= 4) {
+      var vals = sh.getRange(4, 2, last - 3, 1).getValues();
+      for (var i = 0; i < vals.length; i++) parts.push(String(vals[i][0] || ''));
+    }
+    var raw = parts.join('');
+    if (!raw) return { ok: true, rev: meta.rev, data: null };
+    return { ok: true, rev: meta.rev, updatedAt: meta.updatedAt, by: meta.by, data: JSON.parse(raw) };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+function masterWrite_(data, by) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = masterSheet_(ss);
+    var rev = (Number(sh.getRange(1, 2).getValue()) || 0) + 1;
+
+    var raw = JSON.stringify(data || {});
+    var chunks = [];
+    for (var i = 0; i < raw.length; i += MASTER_CHUNK) chunks.push([raw.substr(i, MASTER_CHUNK)]);
+    if (!chunks.length) chunks = [['']];
+
+    // 前より短くなったときに古い断片が残らないよう、いったん消してから書く
+    var last = sh.getLastRow();
+    if (last >= 4) sh.getRange(4, 2, last - 3, 1).clearContent();
+    sh.getRange(4, 2, chunks.length, 1).setValues(chunks);
+
+    sh.getRange(1, 2).setValue(rev);
+    sh.getRange(2, 2).setValue(Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'));
+    sh.getRange(3, 2).setValue(String(by || ''));
+    return { ok: true, rev: rev, bytes: raw.length };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 /* ============ LINE通知 ============

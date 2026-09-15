@@ -458,6 +458,24 @@ const L = {
   lineNoUrl:['กรุณาตั้งค่า URL ของ Apps Script ก่อน','先にApps ScriptのURLを設定してください'],
   lineNote:['ต้องตั้งค่าโทเคนของ LINE ไว้ใน Apps Script ก่อน (ดู google-sheet-setup.md)','先にApps Script側でLINEのトークンを設定しておく必要があります（google-sheet-setup.md 参照）'],
   lineTitle:['รายการสั่งซื้อวันนี้','本日の発注'],
+  mstSect:['ข้อมูลหลักที่ใช้ร่วมกัน','マスタの共有'],
+  mstDesc:['รายการวัตถุดิบ ซัพพลายเออร์ หน่วย และวันหยุด จะใช้ชุดเดียวกันทุกเครื่อง เปิดแอปแล้วจะดึงของใหม่ให้เอง','品目・仕入先・単位・祝日を全端末で同じ内容にします。アプリを開いたときに最新を自動で取り込みます'],
+  mstState:['เวอร์ชันที่เครื่องนี้ใช้','この端末が使っている版'],
+  mstNever:['ยังไม่เคยซิงค์','まだ同期していません'],
+  mstLocal:['เครื่องนี้มีการแก้ที่ยังไม่ได้แชร์','この端末に、まだ配っていない変更があります'],
+  mstPush:['แชร์ข้อมูลของเครื่องนี้ให้ทุกเครื่อง','この端末の内容を全端末に配る'],
+  mstPull:['ดึงข้อมูลล่าสุด','最新を取り込む'],
+  mstSending:['กำลังแชร์…','配信中…'],
+  mstLoading:['กำลังดึง…','取り込み中…'],
+  mstPushConfirm:['ข้อมูลหลักของทุกเครื่องจะถูกแทนที่ด้วยของเครื่องนี้ ดำเนินการต่อหรือไม่','全端末のマスタを、この端末の内容で置き換えます。よろしいですか？'],
+  mstNewer:['มีเครื่องอื่นอัปเดตไว้ (%s) ถ้าแชร์ต่อ การแก้ของเครื่องนั้นจะหาย ดำเนินการต่อหรือไม่','他の端末が更新しています（%s）。このまま配ると、その変更は消えます。続けますか？'],
+  mstOverwrite:['มีข้อมูลใหม่จากเครื่องอื่น การแก้ที่ยังไม่ได้แชร์ของเครื่องนี้จะหาย ดึงมาหรือไม่','他の端末の新しいマスタがあります。この端末の未配信の変更は消えますが、取り込みますか？'],
+  mstPushed:['แชร์แล้ว เครื่องอื่นจะได้รับเมื่อเปิดแอป','配りました。他の端末は次にアプリを開いたときに反映されます'],
+  mstPushNg:['ส่งแล้วแต่ยืนยันไม่ได้ กรุณากด "ดึงข้อมูลล่าสุด" เพื่อตรวจสอบ','送信しましたが確認が取れませんでした。「最新を取り込む」で確かめてください'],
+  mstPulled:['ดึงข้อมูลแล้ว (เวอร์ชัน %n)','取り込みました（版 %n）'],
+  mstUpToDate:['เป็นเวอร์ชันล่าสุดอยู่แล้ว','すでに最新です'],
+  mstNone:['ยังไม่มีข้อมูลที่แชร์ไว้ กดปุ่มด้านบนเพื่อแชร์ครั้งแรก','まだ配られたマスタがありません。上のボタンで最初の配信をしてください'],
+  mstErr:['เชื่อมต่อไม่สำเร็จ','通信できませんでした'],
   lineStore:['สาขา','店舗'],
   lineTotal:['รวมทั้งหมด','合計'],
   outboxN:['มีข้อมูลที่ยังไม่ได้ส่งขึ้นชีต %n ครั้ง','シートに未送信のデータが%n件あります'],
@@ -581,7 +599,8 @@ let state = {
   items: SAMPLE_ITEMS.map(o => ({...o})),
   units: [...DEFAULT_UNITS],
   counts:{}, prev:{}, groupBy:'sup', supFilter:null,
-  history:[], cycle:3, safety:20, outbox:[], pin:null, hol:[], lineOn:true
+  history:[], cycle:3, safety:20, outbox:[], pin:null, hol:[], lineOn:true,
+  masterRev:0, masterAt:'', masterBy:'', masterSig:''
 };
 let view = 'count';
 
@@ -603,6 +622,8 @@ document.addEventListener('visibilitychange', () => {
   }else{
     if(view === 'master' && lockOn() && !unlocked) go('master');
     checkForUpdate();
+    /* 在庫を数えている最中は画面が入れ替わらないよう、取り込みを見送る */
+    if(view !== 'count') pullMaster({});
   }
 });
 window.addEventListener('pagehide', flushSave);
@@ -1147,6 +1168,105 @@ async function restoreHistory(btn){
   }
 }
 
+/* ============ マスタの共有（端末間の同期） ============
+   品目・仕入先・単位・祝日をシートに1本だけ置き、全端末が同じものを使う。
+   品目マスタの中身（区分・単位・基準在庫・1ロットの量・ロットの呼び名・1ロットの価格・仕入先）も
+   まとめて同じものになる。
+   ・取り込みは自動（起動時と、他のアプリから戻ったとき）
+   ・配るのは手動（設定画面の「全端末に配る」）
+   店舗名・Apps ScriptのURL・暗証番号・在庫の入力内容・使用履歴は端末ごとのまま。 */
+const masterData = () => ({items:state.items, suppliers:state.suppliers, units:state.units, hol:state.hol});
+/* 変更されたかどうかは、丸ごと持たずに短い符号で比べる（端末の保存領域を使わないため） */
+function masterSig(){
+  const t = JSON.stringify(masterData());
+  let h = 5381;
+  for(let i=0;i<t.length;i++) h = ((h*33) ^ t.charCodeAt(i)) >>> 0;
+  return `${t.length}-${h.toString(36)}`;
+}
+const masterDirty = () => !!state.masterSig && masterSig() !== state.masterSig;
+function applyMaster(d){
+  if(!d) return false;
+  if(Array.isArray(d.items) && d.items.length) state.items = d.items;
+  if(Array.isArray(d.suppliers)) state.suppliers = d.suppliers;
+  if(Array.isArray(d.units) && d.units.length) state.units = d.units;
+  if(Array.isArray(d.hol)) state.hol = d.hol;
+  /* 配られたマスタから消えた品目は、在庫入力と前回在庫も残さない */
+  const ids = new Set(state.items.map(i => i.id));
+  for(const k of Object.keys(state.counts)) if(!ids.has(k)) delete state.counts[k];
+  for(const k of Object.keys(state.prev)) if(!ids.has(k)) delete state.prev[k];
+  if(state.supFilter && !state.suppliers.some(x => x.id === state.supFilter)) state.supFilter = null;
+  return true;
+}
+let mstBusy = false;
+/* opts.manual … 設定画面のボタンから呼ばれた（メッセージを必ず出す） */
+async function pullMaster(opts){
+  const o = opts || {};
+  if(mstBusy) return false;
+  if(!state.sheetUrl){ if(o.manual) toast(pick('sheetNoUrl')); return false; }
+  mstBusy = true;
+  try{
+    const meta = await jsonp(state.sheetUrl, {mode:'masterrev'}, 20000);
+    if(!meta || !meta.ok) throw new Error('ng');
+    const rev = Number(meta.rev) || 0;
+    if(!rev){ if(o.manual) toast(pick('mstNone')); return false; }
+    if(rev === Number(state.masterRev || 0)){ if(o.manual) toast(pick('mstUpToDate')); return false; }
+    /* 自動のときは、この端末の未配信の変更を黙って消さない */
+    if(!o.manual && masterDirty() && !confirm(pick('mstOverwrite'))) return false;
+    const full = await jsonp(state.sheetUrl, {mode:'master'}, 25000);
+    if(!full || !full.ok || !full.data) throw new Error('ng');
+    applyMaster(full.data);
+    state.masterRev = Number(full.rev) || rev;
+    state.masterAt = full.updatedAt || '';
+    state.masterBy = full.by || '';
+    state.masterSig = masterSig();
+    save(); flushSave();
+    toast(pick('mstPulled').replace(/%n/g, state.masterRev));
+    go(view);
+    return true;
+  }catch(e){
+    if(o.manual) toast(pick('mstErr'));
+    return false;
+  }finally{
+    mstBusy = false;
+  }
+}
+/* 配る。POSTは応答を読めないので、送ったあとに版が上がったかを見に行って確かめる。 */
+async function pushMaster(btn){
+  if(!state.sheetUrl){ toast(pick('sheetNoUrl')); return; }
+  let meta = null;
+  try{ meta = await jsonp(state.sheetUrl, {mode:'masterrev'}, 20000); }catch(e){}
+  const srvRev = (meta && meta.ok) ? (Number(meta.rev) || 0) : 0;
+  if(srvRev && srvRev !== Number(state.masterRev || 0)){
+    const who = `${(meta && meta.updatedAt) || ''} ${(meta && meta.by) || ''}`.trim();
+    if(!confirm(pick('mstNewer').replace('%s', who))) return;
+  }
+  if(!confirm(pick('mstPushConfirm'))) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = pick('mstSending');
+  try{
+    await postRows(JSON.stringify({type:'master', by: state.store || '', data: masterData()}));
+    let done = false;
+    for(let i=0;i<8;i++){
+      await new Promise(r => setTimeout(r, 1500));
+      try{
+        const m = await jsonp(state.sheetUrl, {mode:'masterrev'}, 15000);
+        if(m && m.ok && (Number(m.rev) || 0) > srvRev){
+          state.masterRev = Number(m.rev);
+          state.masterAt = m.updatedAt || '';
+          state.masterBy = m.by || '';
+          state.masterSig = masterSig();
+          save(); flushSave();
+          done = true; break;
+        }
+      }catch(e){}
+    }
+    toast(pick(done ? 'mstPushed' : 'mstPushNg'));
+  }finally{
+    btn.disabled = false; btn.textContent = label;
+    renderMaster();
+  }
+}
+
 /* ============ 基準在庫・発注ロットの自動提案 ============ */
 const leadOf = it => { const sp = supOf(it); const v = sp ? Number(sp.lead) : NaN; return v > 0 ? v : 1; };
 function usageStats(itemId, windowDays){
@@ -1443,6 +1563,17 @@ function renderMaster(){
     </div>
     <button class="addbtn" id="lineTestBtn" style="margin-bottom:16px">${one('lineTestBtn')}</button>`;
 
+  html += `<p class="secttl">${one('mstSect')}</p>
+    <div class="setrow">
+      <p class="cap" style="margin:0">${pick('mstDesc')}</p>
+      <p class="cap">${pick('mstState')}：${state.masterRev
+        ? `${state.masterRev}${state.masterAt ? `（${esc(state.masterAt)}${state.masterBy ? ' ・ '+esc(state.masterBy) : ''}）` : ''}`
+        : pick('mstNever')}</p>
+      ${masterDirty() ? `<p class="cap" style="color:var(--warn,#a15c00)">${pick('mstLocal')}</p>` : ''}
+    </div>
+    <button class="addbtn" id="mstPushBtn">${one('mstPush')}</button>
+    <button class="addbtn" id="mstPullBtn" style="margin-bottom:16px">${one('mstPull')}</button>`;
+
   html += `<p class="secttl">${one('lockSect')}</p>
     <div class="setrow">
       <p class="cap" style="margin:0">${pick('lockDesc')}</p>
@@ -1578,6 +1709,13 @@ function renderMaster(){
   document.getElementById('restHist').onclick = e => restoreHistory(e.currentTarget);
   document.getElementById('setLineOn').onchange = e => { state.lineOn = e.target.checked; save(); };
   document.getElementById('lineTestBtn').onclick = e => lineTest(e.currentTarget);
+  document.getElementById('mstPushBtn').onclick = e => pushMaster(e.currentTarget);
+  document.getElementById('mstPullBtn').onclick = async e => {
+    const b = e.currentTarget, t = b.textContent;
+    b.disabled = true; b.textContent = pick('mstLoading');
+    try{ await pullMaster({manual:true}); }
+    finally{ b.disabled = false; b.textContent = t; }
+  };
 
   document.getElementById('holAdd').onclick = () => {
     const d = document.getElementById('holD').value;
@@ -1886,5 +2024,7 @@ document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => go(b.data
   go('count');
   renderHolBar();
   checkForUpdate();
+  /* 起動のたびに共有マスタを見に行く。版が上がっていれば取り込む */
+  pullMaster({});
 })();
 </script>
