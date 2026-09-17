@@ -67,6 +67,9 @@
   .row .flag{font-size:12px;font-weight:700;margin-top:3px}
   .flag.need{color:var(--ume)} .flag.ok{color:var(--take)} .flag.none{color:var(--dashi)}
   .flag.blank{display:none}
+  /* 数える単位（袋・箱…）を入力欄の下に小さく出す。数字が何の個数かを迷わせないため */
+  .stepwrap{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px}
+  .stepwrap .ulab{font-size:10.5px;color:var(--muted);line-height:1.1;max-width:150px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .stepper{display:flex;align-items:center;gap:4px;flex:none}
   .stepper button{width:44px;height:44px;border:1px solid var(--line);background:#F7F8F5;border-radius:8px;font-size:20px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
   .stepper button:active{background:#E6E8E2}
@@ -134,6 +137,8 @@
   .fields label>.th,.fields label>.ja{display:inline}
   .fields label>.ja::before{content:"／"}
   .fields input,.fields select{border:1px solid var(--line);border-radius:7px;padding:9px;background:#FBFCFA;font-size:15px;width:100%;color:var(--ink)}
+  .fields label>.eq{font-size:10.5px;color:var(--dashi);line-height:1.2;min-height:12px}
+  .fields > .cap{font-size:11px;color:var(--muted);line-height:1.45;margin:0}
   .days{grid-column:1/-1}
   .days > .cap{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
   .days .dd{display:flex;gap:4px}
@@ -226,6 +231,10 @@
 
 <script>
 const KEY = 'stock-order-app-v3';
+/* データの形の版。
+   1 … 基準在庫・在庫を実量（g など）で持っていた
+   2 … 基準在庫・在庫・前回在庫・納品実数をロット数（袋・箱…）で持つ */
+const DATA_VER = 2;
 const WD_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
 const WD_JA = ['日','月','火','水','木','金','土'];
 /* ロットの呼び名。品目には key を保存し、表示だけ言語に合わせる。
@@ -258,7 +267,7 @@ if(!window.storage){
 
 /* ---------- 文言 ---------- */
 const L = {
-  hintCount:['นับของบนชั้นแล้วกรอกจำนวน ช่องที่เว้นว่างจะไม่ถูกสั่งซื้อ','棚を数えて入力してください。空欄の品目は発注に含みません'],
+  hintCount:['นับของบนชั้นเป็นล็อต (ถุง・กล่อง…) แล้วกรอกจำนวน ช่องที่เว้นว่างจะไม่ถูกสั่งซื้อ','棚を数えて入力してください（袋・箱などロット単位）。空欄の品目は発注に含みません'],
   noItems:['ยังไม่มีรายการ เพิ่มได้ที่หน้าตั้งค่า','品目がありません。設定で登録してください'],
   all:['ทั้งหมด','すべて'],
   canOrder:['สั่งได้วันนี้','本日発注可'],
@@ -273,7 +282,7 @@ const L = {
   fLotSize:['ปริมาณต่อ 1 ล็อต (เช่น 1 ถุง = 1000 g)','1ロットの量（例：1袋＝1000g）'],
   fLotUnit:['เรียกล็อตว่าอะไร','ロットの呼び名'],
   fLotPrice:['ราคาต่อ 1 ล็อต','1ロットの価格'],
-  lotHelp:['สั่งเป็นล็อต เช่น มาตรฐาน 1000 g ล็อตละ 1000 g เหลือ 300 g จะสั่ง 1 ถุง','発注はロット単位です。例：基準1000g・1ロット1000g・在庫300g → 1袋を発注'],
+  lotHelp:['นับเป็นล็อต เช่น มาตรฐาน 2 ถุง、1 ถุง ＝ 1,000 g ถ้านับได้ 1 ถุง จะสั่ง 1 ถุง','在庫も基準在庫もロットの個数で数えます。例：基準2袋・1袋＝1,000g・在庫1袋 → 1袋を発注'],
   filled:[' รายการที่กรอกแล้ว',' 品目 入力済み'],
   shortN:[' รายการขาด・ประมาณ ',' 品目が不足・概算 '],
   toResult:['ดูรายการสั่งซื้อ','発注リストへ'],
@@ -373,7 +382,7 @@ const L = {
   resetDone:['ล้างข้อมูลแล้ว','在庫の入力を消しました'],
 
   /* 納品 */
-  recvHint:['กรอกจำนวนที่ได้รับจริง ถ้าได้ครบตามที่สั่งกดปุ่มด้านล่างได้เลย','実際に届いた数量を入力してください。発注どおり届いた場合は下のボタンで一括入力できます'],
+  recvHint:['กรอกจำนวนที่ได้รับจริงเป็นล็อต (ถุง・กล่อง…) ถ้าได้ครบตามที่สั่งกดปุ่มด้านล่างได้เลย','実際に届いた数を入力してください（袋・箱などロット単位）。発注どおり届いた場合は下のボタンで一括入力できます'],
   recvNone:['ยังไม่มีออเดอร์ที่รอรับของ','納品待ちの発注はありません'],
   recvNoneHint:['หลังกด「บันทึกลงชีต」ในหน้าสั่งซื้อ รายการที่สั่งจะมาแสดงที่นี่','発注リスト画面で「シートに保存」を押すと、発注した品目がここに表示されます'],
   recvOrdered:['สั่งไว้ ','発注 '],
@@ -394,14 +403,14 @@ const L = {
   sugCalc:['คำนวณข้อเสนอ','提案を計算する'],
   sugHowTitle:['ตัวเลข 3 ตัวนี้คืออะไร','この3つの数字の意味'],
   sugParOnly:['แนะนำเฉพาะสต๊อกมาตรฐาน ปริมาณต่อล็อตขึ้นกับซัพพลายเออร์ จึงไม่แนะนำให้','提案するのは基準在庫だけです。1ロットの量は仕入先の売り方で決まるため提案しません'],
-  sugFormula:['สต๊อกมาตรฐาน ＝ ใช้ต่อวัน ×（lead time ＋ รอบการสั่ง）×（1 ＋ เผื่อ %）','基準在庫 ＝ 1日の使用量 ×（リードタイム ＋ 発注サイクル）×（1 ＋ 安全率）'],
+  sugFormula:['สต๊อกมาตรฐาน ＝ ใช้ต่อวัน ×（lead time ＋ รอบการสั่ง）×（1 ＋ เผื่อ %）÷ ปริมาณต่อล็อต','基準在庫 ＝ 1日の使用量 ×（リードタイム ＋ 発注サイクル）×（1 ＋ 安全率）÷ 1ロットの量'],
   sugH1:['รอบการสั่ง (วัน)：สั่งทุกกี่วัน สั่งทุกวัน＝1、สัปดาห์ละ 2 ครั้ง＝3〜4','発注サイクル（日）：何日に1回発注するか。毎日なら1、週2回なら3〜4'],
   sugH2:['lead time (วัน)：สั่งแล้วของถึงในกี่วัน ตั้งที่แต่ละซัพพลายเออร์ ถ้าไม่ได้ตั้งจะนับเป็น 1 วัน','リードタイム（日）：発注してから届くまでの日数。仕入先ごとに設定。未設定なら1日として計算'],
   sugH3:['เผื่อความปลอดภัย (%)：เผื่อไว้กี่เปอร์เซ็นต์ ใส่ 20 คือคูณ 1.2 กันของขาด','安全率（%）：何%多めに持つか。20なら1.2倍。使う量のブレで欠品しないための上乗せ'],
   sugWhy:['ที่ต้องบวก lead time เพราะของต้องพอใช้จนกว่าของรอบถัดไปจะมาถึง','リードタイムを足すのは、次に品物が届くまで在庫が持たないといけないため'],
   sugEx:['ตัวอย่าง：ข้าวใช้วันละ 500 g・lead time 1 วัน・รอบการสั่ง 3 วัน・เผื่อ 20%','例：米が1日500g、リードタイム1日、発注サイクル3日、安全率20%'],
-  sugExPar:['สต๊อกมาตรฐาน ＝ 500 ×（1 ＋ 3）× 1.2 ＝ 2,400 → ปัดขึ้นเป็น 2,500 g','基準在庫 ＝ 500 ×（1 ＋ 3）× 1.2 ＝ 2,400 → 切り上げて 2,500 g'],
-  sugExLot:['ล็อตสั่ง ＝ 500 × 3 ＝ 1,500 g','発注ロット ＝ 500 × 3 ＝ 1,500 g'],
+  sugExPar:['สต๊อกมาตรฐาน ＝ 500 ×（1 ＋ 3）× 1.2 ＝ 2,400 g','基準在庫 ＝ 500 ×（1 ＋ 3）× 1.2 ＝ 2,400 g'],
+  sugExLot:['1 ถุง ＝ 1,000 g จึง ＝ 2,400 ÷ 1,000 ＝ 2.4 → ปัดขึ้นเป็น 2.5 ถุง','1袋＝1,000g なので 2,400 ÷ 1,000 ＝ 2.4 → 切り上げて 2.5 袋'],
   sugTip:['ของขาดแล้วเดือดร้อน→30%、ของเสียง่าย→10%、ไม่แน่ใจ→20% ตามเดิม','欠品が痛い品目が多い→30%、日持ちしない→10%、迷ったら20%のまま'],
   sugApply:['นำไปใช้กับรายการที่เลือก','チェックした品目に反映'],
   sugPar:['มาตรฐาน','基準'],
@@ -515,84 +524,84 @@ const SAMPLE_SUPS = [
   {id:'s10', name:"ｍeisyoku(名古屋食糧)", nameJa:"名古屋食糧", url:"https://meisyoku.co.jp/", phone:"098-269-3930", email:"y-noritake@meisyoku.co.jp", note:"", closed:[], holidays:[], cutoff:""}
 ];
 const SAMPLE_ITEMS = [
-  {id:'i001', cat:"ｍeisyoku(名古屋食糧)", name:"ข้าว", nameJa:"米", unit:'g', par:1000, lot:1000, price:120, supId:'s10'},
-  {id:'i002', cat:"kobeya(神戸屋)", name:"สาหร่ายโนริ", nameJa:"海苔", unit:'g', par:135, lot:135, price:450, supId:'s07'},
-  {id:'i003', cat:"Jae Toi's Shop Khlongtoey Market", name:"ต้นหอม", nameJa:"小葱", unit:'g', par:1000, lot:1000, price:100, supId:'s01'},
-  {id:'i004', cat:"Jae Toi's Shop Khlongtoey Market", name:"ต้นหอม", nameJa:"蔥", unit:'g', par:1000, lot:1000, price:80, supId:'s01'},
-  {id:'i005', cat:"Jae Toi's Shop Khlongtoey Market", name:"แครอท", nameJa:"人参", unit:'g', par:1000, lot:1000, price:35, supId:'s01'},
-  {id:'i006', cat:"Jae Toi's Shop Khlongtoey Market", name:"หัวไชเท้าไดคอน", nameJa:"大根", unit:'g', par:1000, lot:1000, price:35, supId:'s01'},
-  {id:'i007', cat:"Jae Toi's Shop Khlongtoey Market", name:"มันเทศ", nameJa:"さつまいも", unit:'g', par:1000, lot:1000, price:50, supId:'s01'},
-  {id:'i008', cat:"Jae Toi's Shop Khlongtoey Market", name:"หัวหอม", nameJa:"玉ねぎ", unit:'g', par:1000, lot:1000, price:45, supId:'s01'},
-  {id:'i009', cat:"Jae Toi's Shop Khlongtoey Market", name:"รากเบอร์ดอก", nameJa:"ごぼう", unit:'g', par:1000, lot:1000, price:100, supId:'s01'},
-  {id:'i010', cat:"Jae Toi's Shop Khlongtoey Market", name:"ไข่ต้ม", nameJa:"茹で卵", unit:'g', par:1000, lot:1000, price:102, supId:'s01'},
-  {id:'i011', cat:"Jae Toi's Shop Khlongtoey Market", name:"ใบชิโซะ", nameJa:"大葉", unit:'g', par:10, lot:10, price:20, supId:'s01'},
-  {id:'i012', cat:"makotoya(誠屋)", name:"บุก", nameJa:"こんにゃく", unit:'g', par:220, lot:220, price:36, supId:'s08'},
-  {id:'i013', cat:"Makro PRO", name:"เต้าหู้เนื้อเนียน", nameJa:"絹豆腐", unit:'g', par:300, lot:300, price:40, supId:'s04'},
-  {id:'i014', cat:"Jae Toi's Shop Khlongtoey Market", name:"เนื้อไก่ (50-60 กรัมต่อชิ้น)", nameJa:"鶏モモ肉骨なし (1カット50-60g)", unit:'g', par:1000, lot:1000, price:120, supId:'s01'},
-  {id:'i015', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"หมูสามชั้นหั่นบาง (หนา 1.5 มม. สำหรับชาบูชาบู)", nameJa:"豚バラスライス（1.5mmスライス シャブシャブ用）", unit:'g', par:1000, lot:1000, price:350, supId:'s05'},
+  {id:'i001', cat:"ｍeisyoku(名古屋食糧)", name:"ข้าว", nameJa:"米", unit:'g', par:1, lot:1000, price:120, supId:'s10'},
+  {id:'i002', cat:"kobeya(神戸屋)", name:"สาหร่ายโนริ", nameJa:"海苔", unit:'g', par:1, lot:135, price:450, supId:'s07'},
+  {id:'i003', cat:"Jae Toi's Shop Khlongtoey Market", name:"ต้นหอม", nameJa:"小葱", unit:'g', par:1, lot:1000, price:100, supId:'s01'},
+  {id:'i004', cat:"Jae Toi's Shop Khlongtoey Market", name:"ต้นหอม", nameJa:"蔥", unit:'g', par:1, lot:1000, price:80, supId:'s01'},
+  {id:'i005', cat:"Jae Toi's Shop Khlongtoey Market", name:"แครอท", nameJa:"人参", unit:'g', par:1, lot:1000, price:35, supId:'s01'},
+  {id:'i006', cat:"Jae Toi's Shop Khlongtoey Market", name:"หัวไชเท้าไดคอน", nameJa:"大根", unit:'g', par:1, lot:1000, price:35, supId:'s01'},
+  {id:'i007', cat:"Jae Toi's Shop Khlongtoey Market", name:"มันเทศ", nameJa:"さつまいも", unit:'g', par:1, lot:1000, price:50, supId:'s01'},
+  {id:'i008', cat:"Jae Toi's Shop Khlongtoey Market", name:"หัวหอม", nameJa:"玉ねぎ", unit:'g', par:1, lot:1000, price:45, supId:'s01'},
+  {id:'i009', cat:"Jae Toi's Shop Khlongtoey Market", name:"รากเบอร์ดอก", nameJa:"ごぼう", unit:'g', par:1, lot:1000, price:100, supId:'s01'},
+  {id:'i010', cat:"Jae Toi's Shop Khlongtoey Market", name:"ไข่ต้ม", nameJa:"茹で卵", unit:'g', par:1, lot:1000, price:102, supId:'s01'},
+  {id:'i011', cat:"Jae Toi's Shop Khlongtoey Market", name:"ใบชิโซะ", nameJa:"大葉", unit:'g', par:1, lot:10, price:20, supId:'s01'},
+  {id:'i012', cat:"makotoya(誠屋)", name:"บุก", nameJa:"こんにゃく", unit:'g', par:1, lot:220, price:36, supId:'s08'},
+  {id:'i013', cat:"Makro PRO", name:"เต้าหู้เนื้อเนียน", nameJa:"絹豆腐", unit:'g', par:1, lot:300, price:40, supId:'s04'},
+  {id:'i014', cat:"Jae Toi's Shop Khlongtoey Market", name:"เนื้อไก่ (50-60 กรัมต่อชิ้น)", nameJa:"鶏モモ肉骨なし (1カット50-60g)", unit:'g', par:1, lot:1000, price:120, supId:'s01'},
+  {id:'i015', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"หมูสามชั้นหั่นบาง (หนา 1.5 มม. สำหรับชาบูชาบู)", nameJa:"豚バラスライス（1.5mmスライス シャブシャブ用）", unit:'g', par:1, lot:1000, price:350, supId:'s05'},
   {id:'i016', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"เนื้อวากิวหั่นบาง (หนา 1.5 มม. สำหรับชาบูชาบู)", nameJa:"和牛スライス（1.5mmスライス シャブシャブ用）", unit:'g', par:0, lot:1, price:0, supId:'s05'},
-  {id:'i017', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"เนื้อวัวหั่นบาง", nameJa:"牛スライス", unit:'g', par:1000, lot:1000, price:550, supId:'s05'},
-  {id:'i018', cat:"Jae Toi's Shop Khlongtoey Market", name:"เนื้อหมูบด", nameJa:"豚ミンチ", unit:'g', par:1000, lot:1000, price:160, supId:'s01'},
-  {id:'i019', cat:"Thai-German Meat Product Co., Ltd.", name:"หมูสามชั้นสไลซ์", nameJa:"PBポークスライス（スパムの形状）", unit:'g', par:400, lot:400, price:89, supId:'s06'},
-  {id:'i020', cat:"Japan MARINO", name:"ซึบุตสึยะ อัพ K1", nameJa:"粒つやアップK1（炊飯改良剤）", unit:'g', par:500, lot:500, price:1152, supId:'s02'},
-  {id:'i021', cat:"kobeya(神戸屋)", name:"เกลือทะเล", nameJa:"海塩（シママース）", unit:'g', par:1000, lot:1000, price:95, supId:'s07'},
-  {id:'i022', cat:"kobeya(神戸屋)", name:"ซอสถั่วเหลืองเข้มข้น", nameJa:"濃口醤油", unit:'g', par:18000, lot:18000, price:950, supId:'s07'},
-  {id:'i023', cat:"kobeya(神戸屋)", name:"มิริน", nameJa:"みりん", unit:'g', par:5000, lot:5000, price:365, supId:'s07'},
-  {id:'i024', cat:"kobeya(神戸屋)", name:"สาเกสำหรับทำอาหาร", nameJa:"料理酒", unit:'g', par:18000, lot:18000, price:2400, supId:'s07'},
-  {id:'i025', cat:"Makro PRO", name:"น้ำตาลอ้อยดิบ", nameJa:"きび糖", unit:'g', par:500, lot:500, price:33, supId:'s04'},
-  {id:'i026', cat:"kobeya(神戸屋)", name:"ชิโร ดาชิ สำหรับใช้ในเชิงพาณิชย์", nameJa:"業務用 白だし", unit:'g', par:1500, lot:1500, price:330, supId:'s07'},
-  {id:'i027', cat:"kobeya(神戸屋)", name:"ผงดาชิสาหร่ายคอมบุ", nameJa:"コンソメ　 昆布だし粉", unit:'g', par:1000, lot:1000, price:644, supId:'s07'},
-  {id:'i028', cat:"kobeya(神戸屋)", name:"ผงดาชิปลาโบนิโต", nameJa:"コンソメ　鰹だし粉", unit:'g', par:1000, lot:1000, price:340, supId:'s07'},
-  {id:'i029', cat:"shopee.th", name:"ตัวปรับค่า pH", nameJa:"PH調整剤", unit:'g', par:1000, lot:1000, price:108, supId:'s09'},
-  {id:'i030', cat:"kobeya(神戸屋)", name:"มายองเนส", nameJa:"マヨネーズ", unit:'g', par:1000, lot:1000, price:115, supId:'s07'},
-  {id:'i031', cat:"kobeya(神戸屋)", name:"หลอดเมนไทโกะรสเผ็ด", nameJa:"辛子明太子チューブ", unit:'g', par:500, lot:500, price:395, supId:'s07'},
-  {id:'i032', cat:"kobeya(神戸屋)", name:"ชิ้นส่วนเมนไทโกะ", nameJa:"明太子切子", unit:'g', par:500, lot:500, price:420, supId:'s07'},
-  {id:'i033', cat:"Makro PRO", name:"ชีสคาเมมเบิร์ต", nameJa:"カマンベールチーズ", unit:'g', par:125, lot:125, price:179, supId:'s04'},
-  {id:'i034', cat:"Makro PRO", name:"ชีสแผ่น", nameJa:"スライスチーズ（チェダーチーズ）", unit:'g', par:500, lot:500, price:259, supId:'s04'},
-  {id:'i035', cat:"Makro PRO", name:"ปลาทูน่าบรรจุน้ำมัน", nameJa:"オイル漬けツナ", unit:'g', par:1350, lot:1350, price:265, supId:'s04'},
-  {id:'i036', cat:"Makro PRO", name:"ปลาแซลมอน", nameJa:"鮭", unit:'g', par:1000, lot:1000, price:459, supId:'s04'},
+  {id:'i017', cat:"NISHIHARA SHOKAI (THAILAND) CO., LTD.", name:"เนื้อวัวหั่นบาง", nameJa:"牛スライス", unit:'g', par:1, lot:1000, price:550, supId:'s05'},
+  {id:'i018', cat:"Jae Toi's Shop Khlongtoey Market", name:"เนื้อหมูบด", nameJa:"豚ミンチ", unit:'g', par:1, lot:1000, price:160, supId:'s01'},
+  {id:'i019', cat:"Thai-German Meat Product Co., Ltd.", name:"หมูสามชั้นสไลซ์", nameJa:"PBポークスライス（スパムの形状）", unit:'g', par:1, lot:400, price:89, supId:'s06'},
+  {id:'i020', cat:"Japan MARINO", name:"ซึบุตสึยะ อัพ K1", nameJa:"粒つやアップK1（炊飯改良剤）", unit:'g', par:1, lot:500, price:1152, supId:'s02'},
+  {id:'i021', cat:"kobeya(神戸屋)", name:"เกลือทะเล", nameJa:"海塩（シママース）", unit:'g', par:1, lot:1000, price:95, supId:'s07'},
+  {id:'i022', cat:"kobeya(神戸屋)", name:"ซอสถั่วเหลืองเข้มข้น", nameJa:"濃口醤油", unit:'g', par:1, lot:18000, price:950, supId:'s07'},
+  {id:'i023', cat:"kobeya(神戸屋)", name:"มิริน", nameJa:"みりん", unit:'g', par:1, lot:5000, price:365, supId:'s07'},
+  {id:'i024', cat:"kobeya(神戸屋)", name:"สาเกสำหรับทำอาหาร", nameJa:"料理酒", unit:'g', par:1, lot:18000, price:2400, supId:'s07'},
+  {id:'i025', cat:"Makro PRO", name:"น้ำตาลอ้อยดิบ", nameJa:"きび糖", unit:'g', par:1, lot:500, price:33, supId:'s04'},
+  {id:'i026', cat:"kobeya(神戸屋)", name:"ชิโร ดาชิ สำหรับใช้ในเชิงพาณิชย์", nameJa:"業務用 白だし", unit:'g', par:1, lot:1500, price:330, supId:'s07'},
+  {id:'i027', cat:"kobeya(神戸屋)", name:"ผงดาชิสาหร่ายคอมบุ", nameJa:"コンソメ　 昆布だし粉", unit:'g', par:1, lot:1000, price:644, supId:'s07'},
+  {id:'i028', cat:"kobeya(神戸屋)", name:"ผงดาชิปลาโบนิโต", nameJa:"コンソメ　鰹だし粉", unit:'g', par:1, lot:1000, price:340, supId:'s07'},
+  {id:'i029', cat:"shopee.th", name:"ตัวปรับค่า pH", nameJa:"PH調整剤", unit:'g', par:1, lot:1000, price:108, supId:'s09'},
+  {id:'i030', cat:"kobeya(神戸屋)", name:"มายองเนส", nameJa:"マヨネーズ", unit:'g', par:1, lot:1000, price:115, supId:'s07'},
+  {id:'i031', cat:"kobeya(神戸屋)", name:"หลอดเมนไทโกะรสเผ็ด", nameJa:"辛子明太子チューブ", unit:'g', par:1, lot:500, price:395, supId:'s07'},
+  {id:'i032', cat:"kobeya(神戸屋)", name:"ชิ้นส่วนเมนไทโกะ", nameJa:"明太子切子", unit:'g', par:1, lot:500, price:420, supId:'s07'},
+  {id:'i033', cat:"Makro PRO", name:"ชีสคาเมมเบิร์ต", nameJa:"カマンベールチーズ", unit:'g', par:1, lot:125, price:179, supId:'s04'},
+  {id:'i034', cat:"Makro PRO", name:"ชีสแผ่น", nameJa:"スライスチーズ（チェダーチーズ）", unit:'g', par:1, lot:500, price:259, supId:'s04'},
+  {id:'i035', cat:"Makro PRO", name:"ปลาทูน่าบรรจุน้ำมัน", nameJa:"オイル漬けツナ", unit:'g', par:1, lot:1350, price:265, supId:'s04'},
+  {id:'i036', cat:"Makro PRO", name:"ปลาแซลมอน", nameJa:"鮭", unit:'g', par:1, lot:1000, price:459, supId:'s04'},
   {id:'i037', cat:"makotoya(誠屋)", name:"ไข่ปลาแซลมอน", nameJa:"いくら", unit:'g', par:0, lot:1, price:0, supId:'s08'},
   {id:'i038', cat:"kobeya(神戸屋)", name:"วาซาบิ", nameJa:"ワサビ", unit:'g', par:0, lot:1, price:0, supId:'s07'},
-  {id:'i039', cat:"makotoya(誠屋)", name:"กุ้งปอกเปลือก 41-50 ตัว", nameJa:"むき海老４１－５０", unit:'g', par:1000, lot:1000, price:370, supId:'s08'},
-  {id:'i040', cat:"kobeya(神戸屋)", name:"แป้งเทมปุระ", nameJa:"天ぷら粉", unit:'g', par:1000, lot:1000, price:115, supId:'s07'},
-  {id:'i041', cat:"kobeya(神戸屋)", name:"สาหร่ายคอมบุเค็ม", nameJa:"塩昆布", unit:'g', par:120, lot:120, price:220, supId:'s07'},
+  {id:'i039', cat:"makotoya(誠屋)", name:"กุ้งปอกเปลือก 41-50 ตัว", nameJa:"むき海老４１－５０", unit:'g', par:1, lot:1000, price:370, supId:'s08'},
+  {id:'i040', cat:"kobeya(神戸屋)", name:"แป้งเทมปุระ", nameJa:"天ぷら粉", unit:'g', par:1, lot:1000, price:115, supId:'s07'},
+  {id:'i041', cat:"kobeya(神戸屋)", name:"สาหร่ายคอมบุเค็ม", nameJa:"塩昆布", unit:'g', par:1, lot:120, price:220, supId:'s07'},
   {id:'i042', cat:"makotoya(誠屋)", name:"พริกชิจิมิสด", nameJa:"生七味", unit:'g', par:0, lot:1, price:0, supId:'s08'},
-  {id:'i043', cat:"kobeya(神戸屋)", name:"พริกชิจิมิ", nameJa:"七味唐辛子", unit:'g', par:300, lot:300, price:149, supId:'s07'},
+  {id:'i043', cat:"kobeya(神戸屋)", name:"พริกชิจิมิ", nameJa:"七味唐辛子", unit:'g', par:1, lot:300, price:149, supId:'s07'},
   {id:'i044', cat:"kobeya(神戸屋)", name:"ยูซุ", nameJa:"柚子", unit:'g', par:0, lot:1, price:0, supId:'s07'},
-  {id:'i045', cat:"King Marine Foods Co., Ltd", name:"ปลาไหลย่างคาบายากิ", nameJa:"うなぎ蒲焼", unit:'g', par:222, lot:222, price:177, supId:'s03'},
-  {id:'i046', cat:"makotoya(誠屋)", name:"เต้าหู้ทอดห่อ", nameJa:"油揚げ", unit:'g', par:30, lot:30, price:29, supId:'s08'},
-  {id:'i047', cat:"Makro PRO", name:"เกลือ", nameJa:"塩", unit:'g', par:1000, lot:1000, price:16, supId:'s04'},
-  {id:'i048', cat:"kobeya(神戸屋)", name:"เกล็ดปลาโบนิโต", nameJa:"かつお節", unit:'g', par:40, lot:40, price:67, supId:'s07'},
-  {id:'i049', cat:"kobeya(神戸屋)", name:"Tempura Flakes (เท็มปุระเฟลก)", nameJa:"天かす（天ぷらフレーク）", unit:'g', par:60, lot:60, price:35, supId:'s07'},
-  {id:'i050', cat:"Makro PRO", name:"น้ำผึ้ง", nameJa:"はちみつ", unit:'g', par:1000, lot:1000, price:155, supId:'s04'},
-  {id:'i051', cat:"Makro PRO", name:"แป้งข้าวเจ้า", nameJa:"米粉", unit:'g', par:1000, lot:1000, price:33, supId:'s04'},
-  {id:'i052', cat:"Makro PRO", name:"แป้งมันฝรั่ง", nameJa:"片栗粉", unit:'g', par:500, lot:500, price:59, supId:'s04'},
-  {id:'i053', cat:"Makro PRO", name:"แป้งเค้ก", nameJa:"薄力粉", unit:'g', par:1000, lot:1000, price:49, supId:'s04'},
-  {id:'i054', cat:"Makro PRO", name:"น้ำมันงา", nameJa:"ごま油", unit:'g', par:4000, lot:4000, price:690, supId:'s04'},
-  {id:'i055', cat:"kobeya(神戸屋)", name:"ขิงขูด", nameJa:"おろし生姜", unit:'g', par:900, lot:900, price:320, supId:'s07'},
-  {id:'i056', cat:"kobeya(神戸屋)", name:"กระเทียมขูด", nameJa:"おろしニンニク", unit:'g', par:1000, lot:1000, price:270, supId:'s07'},
-  {id:'i057', cat:"Makro PRO", name:"เมล็ดงาขาวคั่ว", nameJa:"炒り白ごま", unit:'g', par:1000, lot:1000, price:153, supId:'s04'},
-  {id:'i058', cat:"Makro PRO", name:"ไข่ปลาบิน", nameJa:"とび子", unit:'g', par:500, lot:500, price:379, supId:'s04'},
-  {id:'i059', cat:"kobeya(神戸屋)", name:"หัวไชเท้าดอง", nameJa:"沢庵", unit:'g', par:500, lot:500, price:65, supId:'s07'},
-  {id:'i060', cat:"makotoya(誠屋)", name:"กุ้งซากุระ", nameJa:"桜えび", unit:'g', par:50, lot:50, price:55, supId:'s08'},
-  {id:'i061', cat:"kobeya(神戸屋)", name:"มิโซะแดง", nameJa:"赤味噌", unit:'g', par:1000, lot:1000, price:89, supId:'s07'},
-  {id:'i062', cat:"kobeya(神戸屋)", name:"ข้าวมิโซะ", nameJa:"白米味噌", unit:'g', par:1000, lot:1000, price:120, supId:'s07'},
-  {id:'i063', cat:"kobeya(神戸屋)", name:"มิโซะขาว", nameJa:"西京味噌", unit:'g', par:500, lot:500, price:115, supId:'s07'},
-  {id:'i064', cat:"Makro PRO", name:"ผงปรุงรสไก่ฟ้าไทย（ฟ้าไทยผงปรุงรสรสไก่）", nameJa:"Fa Thai Chicken Flavour Seasoning", unit:'g', par:800, lot:800, price:86, supId:'s04'},
-  {id:'i065', cat:"Makro PRO", name:"เครื่องปรุงรสเคจัน GABAN", nameJa:"ケイジャンシーズニング", unit:'g', par:75, lot:75, price:89, supId:'s04'},
-  {id:'i066', cat:"Makro PRO", name:"ผงออริกาโน", nameJa:"オレガノパウダー", unit:'g', par:100, lot:100, price:110, supId:'s04'},
-  {id:'i067', cat:"Makro PRO", name:"ผงใบโหระพาแห้ง", nameJa:"乾燥バジル　パウダー", unit:'g', par:100, lot:100, price:68, supId:'s04'},
-  {id:'i068', cat:"Makro PRO", name:"ผงโรสแมรี่", nameJa:"ローズマリー パウダー", unit:'g', par:1000, lot:1000, price:241, supId:'s04'},
-  {id:'i069', cat:"Makro PRO", name:"ซอสหอยนางรม", nameJa:"オイスターソース", unit:'g', par:2500, lot:2500, price:194, supId:'s04'},
-  {id:'i070', cat:"Makro PRO", name:"น้ำมันสลัด", nameJa:"サラダ油", unit:'g', par:18000, lot:18000, price:925, supId:'s04'},
-  {id:'i071', cat:"Makro PRO", name:"ไข่", nameJa:"玉子", unit:'g', par:1500, lot:1500, price:130, supId:'s04'},
-  {id:'i072', cat:"King Marine Foods Co., Ltd", name:"เศษปลาไหล", nameJa:"鰻　端材", unit:'g', par:500, lot:500, price:182, supId:'s03'},
-  {id:'i073', cat:"Makro PRO", name:"พริกไทยขาว", nameJa:"ホワイトペッパー", unit:'g', par:500, lot:500, price:269, supId:'s04'},
-  {id:'i074', cat:"Makro PRO", name:"ไข่เหลว (สำหรับทามาโกะยากิ)", nameJa:"卵液、全卵（玉子焼き用）", unit:'g', par:2000, lot:2000, price:177, supId:'s04'},
-  {id:'i075', cat:"Makro PRO", name:"ไข่แดงเหลว (สำหรับทามาโกะยากิ)", nameJa:"卵液、卵黄（玉子焼き用）", unit:'g', par:2000, lot:2000, price:370, supId:'s04'},
-  {id:'i076', cat:"Makro PRO", name:"ปลาเนื้อขาวไร้ก้าง (เช่น ปลาดุก ปลากะพงขาว ปลานิล ฯลฯ)", nameJa:"骨なし　白身魚（鯰、鱸、ティラピアなど）", unit:'g', par:800, lot:800, price:88, supId:'s04'},
-  {id:'i077', cat:"Makro PRO", name:"หอยลายแช่แข็งปอกเปลือก", nameJa:"冷凍むきアサリ", unit:'g', par:800, lot:800, price:95, supId:'s04'},
-  {id:'i078', cat:"kobeya(神戸屋)", name:"ผักกาดดอง (Takana)", nameJa:"スパイシー高菜（漬物）", unit:'g', par:500, lot:500, price:172, supId:'s07'}
+  {id:'i045', cat:"King Marine Foods Co., Ltd", name:"ปลาไหลย่างคาบายากิ", nameJa:"うなぎ蒲焼", unit:'g', par:1, lot:222, price:177, supId:'s03'},
+  {id:'i046', cat:"makotoya(誠屋)", name:"เต้าหู้ทอดห่อ", nameJa:"油揚げ", unit:'g', par:1, lot:30, price:29, supId:'s08'},
+  {id:'i047', cat:"Makro PRO", name:"เกลือ", nameJa:"塩", unit:'g', par:1, lot:1000, price:16, supId:'s04'},
+  {id:'i048', cat:"kobeya(神戸屋)", name:"เกล็ดปลาโบนิโต", nameJa:"かつお節", unit:'g', par:1, lot:40, price:67, supId:'s07'},
+  {id:'i049', cat:"kobeya(神戸屋)", name:"Tempura Flakes (เท็มปุระเฟลก)", nameJa:"天かす（天ぷらフレーク）", unit:'g', par:1, lot:60, price:35, supId:'s07'},
+  {id:'i050', cat:"Makro PRO", name:"น้ำผึ้ง", nameJa:"はちみつ", unit:'g', par:1, lot:1000, price:155, supId:'s04'},
+  {id:'i051', cat:"Makro PRO", name:"แป้งข้าวเจ้า", nameJa:"米粉", unit:'g', par:1, lot:1000, price:33, supId:'s04'},
+  {id:'i052', cat:"Makro PRO", name:"แป้งมันฝรั่ง", nameJa:"片栗粉", unit:'g', par:1, lot:500, price:59, supId:'s04'},
+  {id:'i053', cat:"Makro PRO", name:"แป้งเค้ก", nameJa:"薄力粉", unit:'g', par:1, lot:1000, price:49, supId:'s04'},
+  {id:'i054', cat:"Makro PRO", name:"น้ำมันงา", nameJa:"ごま油", unit:'g', par:1, lot:4000, price:690, supId:'s04'},
+  {id:'i055', cat:"kobeya(神戸屋)", name:"ขิงขูด", nameJa:"おろし生姜", unit:'g', par:1, lot:900, price:320, supId:'s07'},
+  {id:'i056', cat:"kobeya(神戸屋)", name:"กระเทียมขูด", nameJa:"おろしニンニク", unit:'g', par:1, lot:1000, price:270, supId:'s07'},
+  {id:'i057', cat:"Makro PRO", name:"เมล็ดงาขาวคั่ว", nameJa:"炒り白ごま", unit:'g', par:1, lot:1000, price:153, supId:'s04'},
+  {id:'i058', cat:"Makro PRO", name:"ไข่ปลาบิน", nameJa:"とび子", unit:'g', par:1, lot:500, price:379, supId:'s04'},
+  {id:'i059', cat:"kobeya(神戸屋)", name:"หัวไชเท้าดอง", nameJa:"沢庵", unit:'g', par:1, lot:500, price:65, supId:'s07'},
+  {id:'i060', cat:"makotoya(誠屋)", name:"กุ้งซากุระ", nameJa:"桜えび", unit:'g', par:1, lot:50, price:55, supId:'s08'},
+  {id:'i061', cat:"kobeya(神戸屋)", name:"มิโซะแดง", nameJa:"赤味噌", unit:'g', par:1, lot:1000, price:89, supId:'s07'},
+  {id:'i062', cat:"kobeya(神戸屋)", name:"ข้าวมิโซะ", nameJa:"白米味噌", unit:'g', par:1, lot:1000, price:120, supId:'s07'},
+  {id:'i063', cat:"kobeya(神戸屋)", name:"มิโซะขาว", nameJa:"西京味噌", unit:'g', par:1, lot:500, price:115, supId:'s07'},
+  {id:'i064', cat:"Makro PRO", name:"ผงปรุงรสไก่ฟ้าไทย（ฟ้าไทยผงปรุงรสรสไก่）", nameJa:"Fa Thai Chicken Flavour Seasoning", unit:'g', par:1, lot:800, price:86, supId:'s04'},
+  {id:'i065', cat:"Makro PRO", name:"เครื่องปรุงรสเคจัน GABAN", nameJa:"ケイジャンシーズニング", unit:'g', par:1, lot:75, price:89, supId:'s04'},
+  {id:'i066', cat:"Makro PRO", name:"ผงออริกาโน", nameJa:"オレガノパウダー", unit:'g', par:1, lot:100, price:110, supId:'s04'},
+  {id:'i067', cat:"Makro PRO", name:"ผงใบโหระพาแห้ง", nameJa:"乾燥バジル　パウダー", unit:'g', par:1, lot:100, price:68, supId:'s04'},
+  {id:'i068', cat:"Makro PRO", name:"ผงโรสแมรี่", nameJa:"ローズマリー パウダー", unit:'g', par:1, lot:1000, price:241, supId:'s04'},
+  {id:'i069', cat:"Makro PRO", name:"ซอสหอยนางรม", nameJa:"オイスターソース", unit:'g', par:1, lot:2500, price:194, supId:'s04'},
+  {id:'i070', cat:"Makro PRO", name:"น้ำมันสลัด", nameJa:"サラダ油", unit:'g', par:1, lot:18000, price:925, supId:'s04'},
+  {id:'i071', cat:"Makro PRO", name:"ไข่", nameJa:"玉子", unit:'g', par:1, lot:1500, price:130, supId:'s04'},
+  {id:'i072', cat:"King Marine Foods Co., Ltd", name:"เศษปลาไหล", nameJa:"鰻　端材", unit:'g', par:1, lot:500, price:182, supId:'s03'},
+  {id:'i073', cat:"Makro PRO", name:"พริกไทยขาว", nameJa:"ホワイトペッパー", unit:'g', par:1, lot:500, price:269, supId:'s04'},
+  {id:'i074', cat:"Makro PRO", name:"ไข่เหลว (สำหรับทามาโกะยากิ)", nameJa:"卵液、全卵（玉子焼き用）", unit:'g', par:1, lot:2000, price:177, supId:'s04'},
+  {id:'i075', cat:"Makro PRO", name:"ไข่แดงเหลว (สำหรับทามาโกะยากิ)", nameJa:"卵液、卵黄（玉子焼き用）", unit:'g', par:1, lot:2000, price:370, supId:'s04'},
+  {id:'i076', cat:"Makro PRO", name:"ปลาเนื้อขาวไร้ก้าง (เช่น ปลาดุก ปลากะพงขาว ปลานิล ฯลฯ)", nameJa:"骨なし　白身魚（鯰、鱸、ティラピアなど）", unit:'g', par:1, lot:800, price:88, supId:'s04'},
+  {id:'i077', cat:"Makro PRO", name:"หอยลายแช่แข็งปอกเปลือก", nameJa:"冷凍むきアサリ", unit:'g', par:1, lot:800, price:95, supId:'s04'},
+  {id:'i078', cat:"kobeya(神戸屋)", name:"ผักกาดดอง (Takana)", nameJa:"スパイシー高菜（漬物）", unit:'g', par:1, lot:500, price:172, supId:'s07'}
 ];
 
 let state = {
@@ -602,7 +611,9 @@ let state = {
   units: [...DEFAULT_UNITS],
   counts:{}, prev:{}, groupBy:'sup', supFilter:null,
   history:[], cycle:3, safety:20, outbox:[], pin:null, hol:[], lineOn:true,
-  masterRev:0, masterAt:'', masterBy:'', masterSig:''
+  masterRev:0, masterAt:'', masterBy:'', masterSig:'',
+  /* データの形の版。ver 2 から基準在庫と在庫をロット数で持つ */
+  ver: DATA_VER
 };
 let view = 'count';
 
@@ -629,12 +640,33 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('pagehide', flushSave);
+/* 版1→版2の引っ越し。
+   版1では基準在庫・在庫・前回在庫・納品実数を実量（g など）で持っていたので、
+   入数で割ってロット数に直す（例：米 2,500 g ÷ 1袋1,000 g → 2.5 袋）。
+   使用履歴は実量のまま使うので触らない。 */
+const toLots = (v, n) => (v === null || v === undefined || v === '') ? v : round2(Number(v) / n);
+function migrateToLots(){
+  for(const it of state.items){
+    const n = lotSize(it);
+    if(n === 1) continue;
+    it.par = round2(Number(it.par || 0) / n);
+    const c = state.counts[it.id];
+    if(c !== undefined && c !== '' && c !== null) state.counts[it.id] = String(toLots(c, n));
+    const p = state.prev[it.id];
+    if(p){
+      p.stock = toLots(p.stock, n);
+      p.order = toLots(p.order, n);
+      p.received = toLots(p.received, n);
+    }
+  }
+}
 async function load(){
+  let oldVer = DATA_VER;
   try{
     const r = await window.storage.get(KEY);
     if(r && r.value){
       const d = JSON.parse(r.value);
-      if(d && Array.isArray(d.items)) state = Object.assign(state, d);
+      if(d && Array.isArray(d.items)){ oldVer = Number(d.ver) || 1; state = Object.assign(state, d); }
     }
   }catch(e){}
   if(!Array.isArray(state.suppliers)) state.suppliers = [];
@@ -647,6 +679,8 @@ async function load(){
   if(state.safety === undefined || state.safety === null || isNaN(Number(state.safety))) state.safety = 20;
   if(!(state.pin && state.pin.h && state.pin.s)) state.pin = null;
   if(!Array.isArray(state.hol)) state.hol = [];
+  if(oldVer < 2){ migrateToLots(); state.ver = DATA_VER; save(); }
+  state.ver = DATA_VER;
 }
 
 /* ---------- 設定画面のロック（暗証番号） ----------
@@ -736,22 +770,27 @@ const dateLabel = d => d ? `${d.getDate()}/${d.getMonth()+1}(${wd(d.getDay())})`
 const num = v => (v === '' || v === null || v === undefined || isNaN(v)) ? null : Number(v);
 const round2 = n => Math.round(n*100)/100;
 /* ---------- ロット（入数）まわり ----------
-   lot  … 1ロットの量。単位は品目の unit（例：1袋＝1000g なら 1000）
-   price… 1ロットの価格（1単位あたりではない）
-   発注は必ずロット単位で行うため、まずロット数を出し、そこから量と金額を求める。 */
+   数える単位も、基準在庫も、発注も、すべてロット（袋・箱…）の個数でそろえる。
+     par   … 基準在庫。ロット数（例：米 2 ＝ 2袋）
+     counts… 棚を数えた在庫。ロット数（開けかけは 0.5 のように小数でよい）
+     lot   … 1ロットの量（入数）。単位は品目の unit（例：1袋＝1000g なら 1000）
+     price … 1ロットの価格（1単位あたりではない）
+   実量（g など）は「2袋＝2,000g」の表示と、シート・使用履歴に残すときだけ使う。 */
 const lotSize = it => { const v = Number(it.lot); return v > 0 ? v : 1; };
+/* ロット数 → 実量（g など） */
+const toUnits = (it, lots) => round2(Number(lots || 0) * lotSize(it));
 /* 発注ロット数。未カウントなら null、足りていれば 0 */
 function orderLots(item){
   const c = num(state.counts[item.id]);
   if(c === null) return null;
   const short = round2(Number(item.par) - c);
   if(short <= 0) return 0;
-  return Math.ceil((short - 1e-9) / lotSize(item));
+  return Math.ceil(short - 1e-9);          /* 半端は1ロットに切り上げ */
 }
-/* 発注量（品目の単位での合計）。シートと納品画面はこの値を使う */
+/* 発注量を実量（g など）で。シートに残すときだけ使う */
 function orderQty(item){
   const n = orderLots(item);
-  return n === null ? null : round2(n * lotSize(item));
+  return n === null ? null : toUnits(item, n);
 }
 /* 概算金額＝ロット数 × 1ロットの価格 */
 const lotsAmount = (item, lots) => round2(Number(lots || 0) * Number(item.price || 0));
@@ -765,10 +804,18 @@ function lotName(it){
 }
 /* 「2 ถุง/袋」と、その内訳「2,000 g」。1ロット＝1単位のときは内訳を出さない */
 function lotsText(it, lots){
-  const total = round2(Number(lots || 0) * lotSize(it));
+  const total = toUnits(it, lots);
+  /* 1ロット＝1単位（個・枚など）のときは実量を出さない（同じ数字になるため） */
   return {head: fmt(lots) + ' ' + lotName(it),
-          sub: lotSize(it) === 1 ? esc(it.unit) : fmt(total) + ' ' + esc(it.unit)};
+          sub: lotSize(it) === 1 ? '' : fmt(total) + ' ' + esc(it.unit)};
 }
+/* 1行で「2 袋（2,000 g）」。1ロット＝1単位なら「2 袋」だけ */
+function lotsLabel(it, lots){
+  const t = lotsText(it, lots);
+  return lotSize(it) === 1 ? t.head : `${t.head}（${t.sub}）`;
+}
+/* 品目マスタの基準在庫欄に添える「＝ 2,000 g」 */
+const parEqText = it => lotSize(it) === 1 ? '' : `＝ ${fmt(toUnits(it, it.par))} ${esc(it.unit)}`;
 const money = n => state.currency + Math.round(n).toLocaleString('en-US');
 const fmt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits:2});
 const visibleItems = () => state.supFilter ? state.items.filter(i => i.supId === state.supFilter) : state.items;
@@ -788,9 +835,9 @@ function usedQty(item){
 function summary(){
   let need=0, amount=0, blank=0;
   for(const it of visibleItems()){
-    const q = orderQty(it);
-    if(q === null){ blank++; continue; }
-    if(q > 0){ need++; amount += orderAmount(it); }
+    const lots = orderLots(it);
+    if(lots === null){ blank++; continue; }
+    if(lots > 0){ need++; amount += orderAmount(it); }
   }
   const list = visibleItems();
   return {need, amount, blank, counted:list.length - blank, total:list.length};
@@ -843,7 +890,7 @@ function renderCount(){
       const lots = orderLots(it);
       let flag = `<div class="flag blank">${pick('notFilled')}</div>`;
       if(lots !== null) flag = lots > 0
-        ? `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${lotsText(it, lots).head}（${lotsText(it, lots).sub}）</div>`
+        ? `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${lotsLabel(it, lots)}</div>`
         : `<div class="flag ok">${pick('enough')}</div>`;
       const s = supOf(it);
       /* 見出しに出ている情報はメタ行から省く（区分＝仕入先名の運用だと重複して2行に折り返すため） */
@@ -851,13 +898,16 @@ function renderCount(){
       const head = state.groupBy === 'sup' ? supLabel : (it.cat || '');
       const tail = state.groupBy === 'sup' ? (it.cat || '') : supLabel;
       const same = tail && head && tail.trim() === head.trim();
-      const sub = `${L.parIs[state.lang==='ja'?1:0]}${fmt(it.par)} ${esc(it.unit)}${(tail && !same) ? '・' + esc(tail) : ''}`;
+      const sub = `${L.parIs[state.lang==='ja'?1:0]}${lotsLabel(it, it.par)}${(tail && !same) ? '・' + esc(tail) : ''}`;
       html += `<div class="row">
         <div class="info"><div class="nm">${nm(it)}</div><div class="meta num">${sub}</div>${flag}</div>
-        <div class="stepper">
-          <button type="button" data-step="-1" data-id="${it.id}" aria-label="-">−</button>
-          <input type="number" inputmode="decimal" step="any" min="0" placeholder="—" value="${c===undefined||c===''?'':c}" data-count="${it.id}" aria-label="${esc(it.name)}">
-          <button type="button" data-step="1" data-id="${it.id}" aria-label="+">＋</button>
+        <div class="stepwrap">
+          <div class="stepper">
+            <button type="button" data-step="-1" data-id="${it.id}" aria-label="-">−</button>
+            <input type="number" inputmode="decimal" step="any" min="0" placeholder="—" value="${c===undefined||c===''?'':c}" data-count="${it.id}" aria-label="${esc(it.name)}">
+            <button type="button" data-step="1" data-id="${it.id}" aria-label="+">＋</button>
+          </div>
+          <div class="ulab">${lotName(it)}</div>
         </div></div>`;
     }
     html += '</div></section>';
@@ -909,7 +959,7 @@ function renderResult(){
       const c = num(state.counts[r.it.id]);
       const t = lotsText(r.it, r.lots);
       html += `<div class="line">
-        <div class="n">${nm(r.it)}<div class="sub num">${L.stock[state.lang==='ja'?1:0]}${fmt(c)} / ${L.parIs[state.lang==='ja'?1:0]}${fmt(r.it.par)} ${esc(r.it.unit)}</div></div>
+        <div class="n">${nm(r.it)}<div class="sub num">${L.stock[state.lang==='ja'?1:0]}${fmt(c)} / ${L.parIs[state.lang==='ja'?1:0]}${fmt(r.it.par)} ${lotName(r.it)}</div></div>
         <div class="q num">${t.head}<span class="qsub">${t.sub}</span></div>
         <div class="p num">${money(lotsAmount(r.it, r.lots))}</div></div>`;
     }
@@ -956,8 +1006,8 @@ function recvFlag(it, v){
   if(r === null) return `<div class="flag none">${pick('recvPending')}</div>`;
   const diff = round2(r - Number(p.order || 0));
   if(diff === 0) return `<div class="flag exact">${pick('recvExact')}</div>`;
-  if(diff < 0) return `<div class="flag short">${L.recvShort[state.lang==='ja'?1:0]}${fmt(-diff)} ${esc(it.unit)}</div>`;
-  return `<div class="flag over">${L.recvOver[state.lang==='ja'?1:0]}${fmt(diff)} ${esc(it.unit)}</div>`;
+  if(diff < 0) return `<div class="flag short">${L.recvShort[state.lang==='ja'?1:0]}${fmt(-diff)} ${lotName(it)}</div>`;
+  return `<div class="flag over">${L.recvOver[state.lang==='ja'?1:0]}${fmt(diff)} ${lotName(it)}</div>`;
 }
 function renderRecv(){
   const list = pendingItems();
@@ -979,12 +1029,15 @@ function renderRecv(){
       const v = (pr.received === null || pr.received === undefined || pr.received === '') ? '' : pr.received;
       html += `<div class="row">
         <div class="info"><div class="nm">${nm(it)}</div>
-          <div class="meta num">${L.recvOrdered[state.lang==='ja'?1:0]}${fmt(pr.order)} ${esc(it.unit)}・${L.recvOn[state.lang==='ja'?1:0]}${esc(pr.date || '')}</div>
+          <div class="meta num">${L.recvOrdered[state.lang==='ja'?1:0]}${lotsLabel(it, pr.order)}・${L.recvOn[state.lang==='ja'?1:0]}${esc(pr.date || '')}</div>
           ${recvFlag(it, v)}</div>
-        <div class="stepper">
-          <button type="button" data-rstep="-1" data-rid="${it.id}" aria-label="-">−</button>
-          <input type="number" inputmode="decimal" step="any" min="0" placeholder="—" value="${v}" data-recv="${it.id}" aria-label="${esc(it.name)}">
-          <button type="button" data-rstep="1" data-rid="${it.id}" aria-label="+">＋</button>
+        <div class="stepwrap">
+          <div class="stepper">
+            <button type="button" data-rstep="-1" data-rid="${it.id}" aria-label="-">−</button>
+            <input type="number" inputmode="decimal" step="any" min="0" placeholder="—" value="${v}" data-recv="${it.id}" aria-label="${esc(it.name)}">
+            <button type="button" data-rstep="1" data-rid="${it.id}" aria-label="+">＋</button>
+          </div>
+          <div class="ulab">${lotName(it)}</div>
         </div></div>`;
     }
     html += '</div></section>';
@@ -1160,8 +1213,12 @@ async function restoreHistory(btn){
     state.history = rows.filter(h => ids.has(h.id))
       .map(h => ({id:h.id, d:h.d, used:Number(h.used) || 0, days:Number(h.days) || 0}));
     prevs.forEach(p => {
-      if(!ids.has(p.id)) return;
-      state.prev[p.id] = {stock: Number(p.stock) || 0, order: Number(p.order) || 0, date: p.date, received: null};
+      const it = state.items.find(x => x.id === p.id);
+      if(!it) return;
+      /* シートは実量（g など）で入っているので、入数で割ってロット数に戻す */
+      const n = lotSize(it);
+      state.prev[p.id] = {stock: round2((Number(p.stock) || 0) / n), order: round2((Number(p.order) || 0) / n),
+                          date: p.date, received: null};
     });
     save(); flushSave();
     toast(pick('restOk').replace(/%n/g, state.history.length));
@@ -1180,7 +1237,7 @@ async function restoreHistory(btn){
    ・取り込みは自動（起動時と、他のアプリから戻ったとき）
    ・配るのは手動（設定画面の「全端末に配る」）
    店舗名・Apps ScriptのURL・暗証番号・在庫の入力内容・使用履歴は端末ごとのまま。 */
-const masterData = () => ({items:state.items, suppliers:state.suppliers, units:state.units, hol:state.hol});
+const masterData = () => ({ver:DATA_VER, items:state.items, suppliers:state.suppliers, units:state.units, hol:state.hol});
 /* 変更されたかどうかは、丸ごと持たずに短い符号で比べる（端末の保存領域を使わないため） */
 function masterSig(){
   const t = JSON.stringify(masterData());
@@ -1191,7 +1248,11 @@ function masterSig(){
 const masterDirty = () => !!state.masterSig && masterSig() !== state.masterSig;
 function applyMaster(d){
   if(!d) return false;
-  if(Array.isArray(d.items) && d.items.length) state.items = d.items;
+  if(Array.isArray(d.items) && d.items.length){
+    /* 古い版（基準在庫が実量）のマスタが配られてきたときは、ここでロット数に直す */
+    const v = Number(d.ver) || 1;
+    state.items = v >= 2 ? d.items : d.items.map(it => ({...it, par: round2(Number(it.par || 0) / lotSize(it))}));
+  }
   if(Array.isArray(d.suppliers)) state.suppliers = d.suppliers;
   if(Array.isArray(d.units) && d.units.length) state.units = d.units;
   if(Array.isArray(d.hol)) state.hol = d.hol;
@@ -1284,22 +1345,20 @@ function usageStats(itemId, windowDays){
   if(!(days > 0)) return null;
   return {perDay: used / days, n: rows.length};
 }
-/* 現場が数えやすい刻みに切り上げる（例 137→150、600→600、23→25） */
-const NICE_STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
-const niceRound = n => {
+/* ロット数は現場が数えやすい刻みに切り上げる（5未満は0.5刻み、それ以上は1刻み） */
+const niceLots = n => {
   if(!(n > 0)) return 0;
-  const e = Math.pow(10, Math.floor(Math.log10(n)));
-  for(const m of NICE_STEPS) if(n <= m * e + 1e-9) return round2(m * e);
-  return round2(10 * e);
+  return n < 5 ? Math.ceil(n * 2 - 1e-9) / 2 : Math.ceil(n - 1e-9);
 };
 function suggestFor(it){
   const st = usageStats(it.id, 28);
   if(!st || !(st.perDay > 0)) return null;
   const cycle = Number(state.cycle) > 0 ? Number(state.cycle) : 3;
   const safety = 1 + (Number(state.safety) || 0) / 100;
-  /* 1ロットの量は仕入先の売り方で決まるので提案しない。基準在庫だけを出す。 */
-  return {perDay: st.perDay, n: st.n,
-    par: niceRound(st.perDay * (leadOf(it) + cycle) * safety)};
+  /* 1ロットの量は仕入先の売り方で決まるので提案しない。基準在庫だけを出す。
+     使用履歴は実量（g など）なので、入数で割ってロット数にしてから提案する。 */
+  const need = st.perDay * (leadOf(it) + cycle) * safety;
+  return {perDay: st.perDay, n: st.n, par: niceLots(need / lotSize(it))};
 }
 function renderSuggest(){
   const box = document.getElementById('sugBox');
@@ -1312,7 +1371,7 @@ function renderSuggest(){
     h += `<label class="sugrow">
       <input type="checkbox" data-sug="${r.it.id}" ${changed ? 'checked' : ''}>
       <span class="n">${nm(r.it)}<span class="d num">${fmt(round2(r.sg.perDay))} ${esc(r.it.unit)}${L.sugPerDay[state.lang==='ja'?1:0]}・${r.sg.n}${L.sugTimes[state.lang==='ja'?1:0]}</span></span>
-      <span class="v">${L.sugPar[state.lang==='ja'?1:0]}<span class="old">${fmt(r.it.par)}</span><b>${fmt(r.sg.par)}</b></span>
+      <span class="v">${L.sugPar[state.lang==='ja'?1:0]}<span class="old">${fmt(r.it.par)}</span><b>${lotsLabel(r.it, r.sg.par)}</b></span>
     </label>`;
   }
   box.innerHTML = h + `</div><button class="addbtn" id="sugApply">${one('sugApply')}</button>`;
@@ -1350,20 +1409,22 @@ function buildRows(){
   return state.items.filter(it => num(state.counts[it.id]) !== null).map(it => {
     const s = supOf(it);
     const lots = orderLots(it) || 0;
-    const q = round2(lots * lotSize(it));
+    const q = toUnits(it, lots);
     const u = usedQty(it);
     const p = state.prev[it.id];
     /* シートの「単価」列は1単位あたりに直して入れる（発注数×単価＝金額 が成り立つように）。
        ロット数・入数・ロット単価は末尾の列に別で残す。 */
     const unitPrice = round2(Number(it.price || 0) / lotSize(it));
+    /* アプリはロット数で持っているが、シートには従来どおり実量（g など）で残す。
+       入数を変えても過去の使用量と比べられるようにするため。 */
     return {
       date: ymd(d), time: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,
       store: state.store,
       supplierId: s ? s.id : '', supplier: s ? s.name : '', supplierJa: s ? (s.nameJa||'') : '',
       itemId: it.id, item: it.name, itemJa: it.nameJa || '', unit: it.unit, category: it.cat || '',
-      prevStock: p ? p.stock : '', received: p ? receivedOf(p) : '',
-      stock: num(state.counts[it.id]), used: u === null ? '' : u,
-      par: it.par, order: q, price: unitPrice, amount: lotsAmount(it, lots), currency: state.currency,
+      prevStock: p ? toUnits(it, p.stock) : '', received: p ? toUnits(it, receivedOf(p)) : '',
+      stock: toUnits(it, num(state.counts[it.id])), used: u === null ? '' : toUnits(it, u),
+      par: toUnits(it, it.par), order: q, price: unitPrice, amount: lotsAmount(it, lots), currency: state.currency,
       lots, lotSize: lotSize(it), lotPrice: Number(it.price || 0), lotUnit: lotName(it)
     };
   });
@@ -1445,9 +1506,11 @@ function snapshot(){
     const u = usedQty(it);
     if(p && p.date && u !== null){
       const days = dayGap(p.date, today);
-      if(days > 0 && days <= 90) state.history.push({id:it.id, d:today, used:u, days});
+      /* 使用履歴は実量（g など）で残す。入数を変えても数字がぶれないように */
+      if(days > 0 && days <= 90) state.history.push({id:it.id, d:today, used:toUnits(it, u), days});
     }
-    state.prev[it.id] = {stock:c, order:orderQty(it) || 0, date:today, received:null};
+    /* 前回在庫・前回発注はロット数で持つ（納品画面もロットで数えるため） */
+    state.prev[it.id] = {stock:c, order:orderLots(it) || 0, date:today, received:null};
   }
   if(state.history.length > 3000) state.history = state.history.slice(-3000);
   state.lastSent = `${ymd(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -1673,7 +1736,7 @@ function renderMaster(){
   for(const it of state.items){
     const s = supOf(it);
     html += `<details class="mcard">
-      <summary><span class="nmwrap">${nm(it)}</span><span class="s num">${esc(s ? s.name : '—')}<br>${fmt(it.par)} ${esc(it.unit)}</span></summary>
+      <summary><span class="nmwrap">${nm(it)}</span><span class="s num">${esc(s ? s.name : '—')}<br>${fmt(it.par)} ${lotName(it)}</span></summary>
       <div class="fields">
         <label class="wide">${two('fName')}<input data-f="name" data-id="${it.id}" value="${esc(it.name)}"></label>
         <label class="wide">${two('fNameJa')}<input data-f="nameJa" data-id="${it.id}" value="${esc(it.nameJa||'')}"></label>
@@ -1685,7 +1748,8 @@ function renderMaster(){
         <label>${two('fUnit')}<select data-f="unit" data-id="${it.id}">
           ${Array.from(new Set([...(state.units||[]), it.unit].filter(Boolean))).map(u => `<option value="${esc(u)}" ${u===it.unit?'selected':''}>${esc(u)}</option>`).join('')}
         </select></label>
-        <label>${two('fPar')} (${esc(it.unit)})<input type="number" step="any" inputmode="decimal" data-f="par" data-id="${it.id}" value="${it.par}"></label>
+        <label>${two('fPar')} (${lotName(it)})<input type="number" step="any" inputmode="decimal" data-f="par" data-id="${it.id}" value="${it.par}">
+          <span class="eq num" data-eq="${it.id}">${parEqText(it)}</span></label>
         <label>${two('fLotSize')} (${esc(it.unit)})<input type="number" step="any" inputmode="decimal" data-f="lot" data-id="${it.id}" value="${it.lot}"></label>
         <label>${two('fLotUnit')}<select data-f="lotUnit" data-id="${it.id}">
           <option value="" ${!it.lotUnit ? 'selected' : ''}>${L.lotGeneric[0]}／${L.lotGeneric[1]}</option>
@@ -1852,6 +1916,11 @@ function renderMaster(){
       if(!it) return;
       const f = el.dataset.f;
       it[f] = ['par','lot','price'].includes(f) ? (el.value === '' ? 0 : Number(el.value)) : el.value;
+      /* 基準在庫や入数を触ったら、横の実量表示もその場で合わせる */
+      if(['par','lot'].includes(f)){
+        const eq = app.querySelector(`[data-eq="${it.id}"]`);
+        if(eq) eq.textContent = parEqText(it);
+      }
       save();
     };
     el.oninput = h; el.onchange = h;
@@ -2009,9 +2078,8 @@ function updateRow(input){
   const flag = input.closest('.row').querySelector('.flag');
   if(lots === null){ flag.className='flag blank'; flag.textContent = pick('notFilled'); }
   else if(lots > 0){
-    const t = lotsText(it, lots);
     flag.className='flag need';
-    flag.textContent = `${L.orderN[state.lang==='ja'?1:0]}${t.head}（${t.sub}）`;
+    flag.textContent = `${L.orderN[state.lang==='ja'?1:0]}${lotsLabel(it, lots)}`;
   }
   else { flag.className='flag ok'; flag.textContent = pick('enough'); }
   const s = summary();
