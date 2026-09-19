@@ -484,6 +484,10 @@ const L = {
   mstPushed:['แชร์แล้ว เครื่องอื่นจะได้รับเมื่อเปิดแอป','配りました。他の端末は次にアプリを開いたときに反映されます'],
   mstPushNg:['ส่งแล้วแต่ยืนยันไม่ได้ กรุณากด "ดึงข้อมูลล่าสุด" เพื่อตรวจสอบ','送信しましたが確認が取れませんでした。「最新を取り込む」で確かめてください'],
   mstPulled:['ดึงข้อมูลแล้ว (เวอร์ชัน %n)','取り込みました（版 %n）'],
+  mstOldVer:['ข้อมูลมาสเตอร์มาจากแอปรุ่นเก่า ไม่ดึงเข้า กรุณาอัปเดตเครื่องที่แชร์','古い版の端末から配られたマスタのため取り込めません。配る端末を最新にしてからやり直してください'],
+  mstHold:['กำลังนับสต๊อก จะดึงข้อมูลใหม่ทีหลัง','在庫を数えている途中のため、マスタの取り込みはあとにしました'],
+  recAllSup:['จะบันทึกทุกชัพพลาเออร์ ไม่ใช่เฉพาะที่กรองไว้','絞り込み中ですが、記録とLINE通知は全仕入先分が対象になります'],
+  recCleared:['บันทึกแล้ว ล้างจำนวนที่กรอกไว้แล้ว','記録済みのため、在庫の入力をクリアしました'],
   mstUpToDate:['เป็นเวอร์ชันล่าสุดอยู่แล้ว','すでに最新です'],
   mstNone:['ยังไม่มีข้อมูลที่แชร์ไว้ กดปุ่มด้านบนเพื่อแชร์ครั้งแรก','まだ配られたマスタがありません。上のボタンで最初の配信をしてください'],
   mstErr:['เชื่อมต่อไม่สำเร็จ','通信できませんでした'],
@@ -681,14 +685,31 @@ async function load(){
   if(!Array.isArray(state.hol)) state.hol = [];
   if(oldVer < 2){ migrateToLots(); state.ver = DATA_VER; save(); }
   state.ver = DATA_VER;
+  state.suppliers = state.suppliers.map(normSup);
+  state.items = (Array.isArray(state.items) ? state.items : []).map(normItem);
+  /* 前回「発注を記録する」で終わっていたら、在庫の入力は空から始める */
+  if(state.clearNext){
+    state.counts = {};
+    state.clearNext = false;
+    state.recordedSig = '';
+    clearedOnBoot = true;
+    save();
+  }
+  /* 一度も配信・取込をしていない端末でも、この端末の変更を黙って消さないための基準値 */
+  if(!state.masterSig) state.masterSig = masterSig();
 }
+let clearedOnBoot = false;
 
 /* ---------- 設定画面のロック（暗証番号） ----------
    基準在庫・単価・仕入先情報を店舗スタッフが変更できないようにするための簡易ロック。
    暗証番号そのものは保存せず、ソルトを付けて繰り返しハッシュした文字列だけを端末に保存する。
    解除状態はメモリにしか持たないので、画面を離れる・アプリを閉じると再びロックがかかる。 */
 let unlocked = false;
-let pinFail = 0, pinWaitUntil = 0;
+/* 試行回数と待ち時間は端末に持つ。再読込でリセットされると繰り返し試し放題になるため */
+const pinFailGet = () => Number(state.pinFail) || 0;
+const pinFailSet = n => { state.pinFail = n; save(); };
+const pinWaitGet = () => Number(state.pinWait) || 0;
+const pinWaitSet = t => { state.pinWait = t; save(); };
 const lockOn = () => !!(state.pin && state.pin.h);
 function pinHash(pin, salt){
   const s = salt + '|' + String(pin) + '|' + salt;
@@ -715,14 +736,15 @@ function renderLock(){
   </div>`;
   const inp = document.getElementById('pinIn');
   const submit = () => {
-    const left = Math.ceil((pinWaitUntil - Date.now()) / 1000);
+    const left = Math.ceil((pinWaitGet() - Date.now()) / 1000);
     if(left > 0){ toast(pick('lockWait').replace(/%n/g, left)); return; }
     if(pinCheck(inp.value)){
-      unlocked = true; pinFail = 0; inp.value = ''; renderMaster(); return;
+      unlocked = true; pinFailSet(0); pinWaitSet(0); inp.value = ''; renderMaster(); return;
     }
     inp.value = '';
-    if(++pinFail >= 5){ pinFail = 0; pinWaitUntil = Date.now() + 30000; toast(pick('lockWait').replace(/%n/g, 30)); }
-    else toast(pick('lockWrong'));
+    const f = pinFailGet() + 1;
+    if(f >= 5){ pinFailSet(0); pinWaitSet(Date.now() + 30000); toast(pick('lockWait').replace(/%n/g, 30)); }
+    else { pinFailSet(f); toast(pick('lockWrong')); }
     inp.focus();
   };
   document.getElementById('pinGo').onclick = submit;
@@ -767,7 +789,13 @@ const restLabel = sup => {
 const dateLabel = d => d ? `${d.getDate()}/${d.getMonth()+1}(${wd(d.getDay())})` : '—';
 
 /* ---------- 計算 ---------- */
-const num = v => (v === '' || v === null || v === undefined || isNaN(v)) ? null : Number(v);
+const num = v => {
+  if(v === null || v === undefined) return null;
+  const t = String(v).replace(/[\s\u3000]/g, '');   /* 全角スペースも空欄として扱う */
+  if(t === '') return null;
+  const n = Number(t);
+  return isNaN(n) ? null : n;
+};
 const round2 = n => Math.round(n*100)/100;
 /* ---------- ロット（入数）まわり ----------
    数える単位も、基準在庫も、発注も、すべてロット（袋・箱…）の個数でそろえる。
@@ -802,6 +830,11 @@ function lotName(it){
   const ja = u ? u.ja : L.lotGeneric[1];
   return state.lang === 'ja' ? ja : (state.lang === 'th' ? th : th + '/' + ja);
 }
+/* シートに残す呼び名。表示言語によって列の中身が変わらないよう日本語で固定する */
+const lotNameJa = it => {
+  const u = LOT_UNITS.find(x => x.k === (it && it.lotUnit));
+  return u ? u.ja : L.lotGeneric[1];
+};
 /* 「2 ถุง/袋」と、その内訳「2,000 g」。1ロット＝1単位のときは内訳を出さない */
 function lotsText(it, lots){
   const total = toUnits(it, lots);
@@ -1212,13 +1245,19 @@ async function restoreHistory(btn){
     const ids = new Set(state.items.map(i => i.id));
     state.history = rows.filter(h => ids.has(h.id))
       .map(h => ({id:h.id, d:h.d, used:Number(h.used) || 0, days:Number(h.days) || 0}));
+    const lim = new Date(); lim.setDate(lim.getDate() - 14);
+    const recent = ymd(lim);
     prevs.forEach(p => {
       const it = state.items.find(x => x.id === p.id);
       if(!it) return;
+      /* 何ヶ月も前の発注が納品待ちに溜まらないよう、直近14日の記録だけ戻す */
+      if(!p.date || p.date < recent) return;
       /* シートは実量（g など）で入っているので、入数で割ってロット数に戻す */
       const n = lotSize(it);
+      const cur = state.prev[p.id];
       state.prev[p.id] = {stock: round2((Number(p.stock) || 0) / n), order: round2((Number(p.order) || 0) / n),
-                          date: p.date, received: null};
+                          date: p.date,
+                          received: (cur && cur.date === p.date) ? cur.received : null};
     });
     save(); flushSave();
     toast(pick('restOk').replace(/%n/g, state.history.length));
@@ -1238,6 +1277,21 @@ async function restoreHistory(btn){
    ・配るのは手動（設定画面の「全端末に配る」）
    店舗名・Apps ScriptのURL・暗証番号・在庫の入力内容・使用履歴は端末ごとのまま。 */
 const masterData = () => ({ver:DATA_VER, items:state.items, suppliers:state.suppliers, units:state.units, hol:state.hol});
+/* 他の端末から来たデータは欠けている項目があるので、使う前に形を整える */
+function normSup(s){
+  const o = {...s};
+  if(!Array.isArray(o.closed)) o.closed = [];
+  if(!Array.isArray(o.holidays)) o.holidays = [];
+  return o;
+}
+function normItem(it){
+  const o = {...it};
+  o.par = Math.max(0, Number(o.par) || 0);
+  o.lot = Number(o.lot) > 0 ? Number(o.lot) : 1;
+  o.price = Math.max(0, Number(o.price) || 0);
+  if(!o.unit) o.unit = (state.units || ['g'])[0];
+  return o;
+}
 /* 変更されたかどうかは、丸ごと持たずに短い符号で比べる（端末の保存領域を使わないため） */
 function masterSig(){
   const t = JSON.stringify(masterData());
@@ -1248,12 +1302,14 @@ function masterSig(){
 const masterDirty = () => !!state.masterSig && masterSig() !== state.masterSig;
 function applyMaster(d){
   if(!d) return false;
-  if(Array.isArray(d.items) && d.items.length){
-    /* 古い版（基準在庫が実量）のマスタが配られてきたときは、ここでロット数に直す */
-    const v = Number(d.ver) || 1;
-    state.items = v >= 2 ? d.items : d.items.map(it => ({...it, par: round2(Number(it.par || 0) / lotSize(it))}));
+  /* 古い版（基準在庫を実量で持っていた版）が配ったマスタは受け取らない。
+     ロット数と実量を見分けられず、黙って基準在庫を壊すおそれがあるため。 */
+  if(Array.isArray(d.items) && d.items.length && !(Number(d.ver) >= 2)){
+    toast(pick('mstOldVer'));
+    return false;
   }
-  if(Array.isArray(d.suppliers)) state.suppliers = d.suppliers;
+  if(Array.isArray(d.items) && d.items.length) state.items = d.items.map(normItem);
+  if(Array.isArray(d.suppliers)) state.suppliers = d.suppliers.map(normSup);
   if(Array.isArray(d.units) && d.units.length) state.units = d.units;
   if(Array.isArray(d.hol)) state.hol = d.hol;
   /* 配られたマスタから消えた品目は、在庫入力と前回在庫も残さない */
@@ -1276,6 +1332,11 @@ async function pullMaster(opts){
     const rev = Number(meta.rev) || 0;
     if(!rev){ if(o.manual) toast(pick('mstNone')); return false; }
     if(rev === Number(state.masterRev || 0)){ if(o.manual) toast(pick('mstUpToDate')); return false; }
+    /* 数えている途中に画面を作り直すと入力が飛ぶので、入力があるときは見送る */
+    if(!o.manual && view === 'count' && Object.keys(state.counts).some(k => state.counts[k] !== '')){
+      toast(pick('mstHold'));
+      return false;
+    }
     /* 自動のときは、この端末の未配信の変更を黙って消さない */
     if(!o.manual && masterDirty() && !confirm(pick('mstOverwrite'))) return false;
     const full = await jsonp(state.sheetUrl, {mode:'master'}, 25000);
@@ -1396,6 +1457,7 @@ function sheetBox(){
     <h4>${two('recTitle')}</h4>
     <p>${pick(hasSheet ? 'recDescSheet' : 'recDescLocal')}${state.lastSent ? `<br>${L.lastSent[state.lang==='ja'?1:0]}${esc(state.lastSent)}` : ''}</p>
     ${hasSheet ? '' : `<p class="cap2">${pick('recHintSheet')}</p>`}
+    ${state.supFilter ? `<div class="warn">${pick('recAllSup')}</div>` : ''}
     ${ob ? `<div class="warn">${pick('outboxN').replace(/%n/g, ob)}</div>
       <div class="brow"><button type="button" class="alt" id="obSend">${pick('outboxSend')}</button>
       <button type="button" class="alt" id="obDrop">${pick('outboxDrop')}</button></div>` : ''}
@@ -1425,7 +1487,7 @@ function buildRows(){
       prevStock: p ? toUnits(it, p.stock) : '', received: p ? toUnits(it, receivedOf(p)) : '',
       stock: toUnits(it, num(state.counts[it.id])), used: u === null ? '' : toUnits(it, u),
       par: toUnits(it, it.par), order: q, price: unitPrice, amount: lotsAmount(it, lots), currency: state.currency,
-      lots, lotSize: lotSize(it), lotPrice: Number(it.price || 0), lotUnit: lotName(it)
+      lots, lotSize: lotSize(it), lotPrice: Number(it.price || 0), lotUnit: lotNameJa(it)
     };
   });
 }
@@ -1437,10 +1499,13 @@ const lineNm = o => (o && o.nameJa) ? `${o.name} / ${o.nameJa}` : ((o && o.name)
 /* 発注できない理由はタイ語・日本語の両方を出したいので、一時的に言語を切り替えて2回読む */
 function bothReason(sup){
   const cur = state.lang;
-  state.lang = 'th'; const th = closedReason(sup);
-  state.lang = 'ja'; const ja = closedReason(sup);
-  state.lang = cur;
-  return (th && ja) ? `${th} / ${ja}` : (th || ja);
+  try{
+    state.lang = 'th'; const th = closedReason(sup);
+    state.lang = 'ja'; const ja = closedReason(sup);
+    return (th && ja) ? `${th} / ${ja}` : (th || ja);
+  }finally{
+    state.lang = cur;                       /* 途中で失敗しても表示言語を戻す */
+  }
 }
 function buildLineText(){
   const rows = state.items.map(it => ({it, lots:orderLots(it)})).filter(r => r.lots > 0);
@@ -1509,9 +1574,15 @@ function snapshot(){
       /* 使用履歴は実量（g など）で残す。入数を変えても数字がぶれないように */
       if(days > 0 && days <= 90) state.history.push({id:it.id, d:today, used:toUnits(it, u), days});
     }
-    /* 前回在庫・前回発注はロット数で持つ（納品画面もロットで数えるため） */
-    state.prev[it.id] = {stock:c, order:orderLots(it) || 0, date:today, received:null};
+    /* 前回在庫・前回発注はロット数で持つ（納品画面もロットで数えるため）。
+       同じ日に記録をやり直したときは、入力済みの納品実数を消さない。 */
+    const keep = (p && p.date === today) ? p.received : null;
+    state.prev[it.id] = {stock:c, order:orderLots(it) || 0, date:today, received:keep};
   }
+  /* 記録したら、次にアプリを開いたときに在庫の入力を空に戻す。
+     前日の数字が残ったまま記録されて、偽の使用量が入るのを防ぐため。
+     その場で消さないのは、発注リストのコピーをそのあと使うため。 */
+  state.clearNext = true;
   if(state.history.length > 3000) state.history = state.history.slice(-3000);
   state.lastSent = `${ymd(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   save();
@@ -1523,7 +1594,7 @@ function snapshot(){
 const newBatchId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
 const SEND_TIMEOUT = 20000;
 /* 同じ内容をもう一度押しても二重に記録しないよう、記録した時点の入力内容を覚えておく */
-const countsSig = () => JSON.stringify(state.counts);
+const countsSig = () => ymd(new Date()) + '|' + JSON.stringify(state.counts);
 const alreadyRecorded = () => !!state.recordedSig && state.recordedSig === countsSig();
 let sending = false;
 async function postRows(payload){
@@ -1772,8 +1843,20 @@ function renderMaster(){
   document.getElementById('setLang').onchange = e => { state.lang = e.target.value; applyLang(); save(); renderMaster(); };
   document.getElementById('setGroup').onchange = e => { state.groupBy = e.target.value; save(); };
   document.getElementById('setSheet').oninput = e => { state.sheetUrl = e.target.value.trim(); save(); };
-  document.getElementById('setCycle').oninput = e => { state.cycle = e.target.value === '' ? '' : Number(e.target.value); save(); };
-  document.getElementById('setSafety').oninput = e => { state.safety = e.target.value === '' ? 0 : Number(e.target.value); save(); };
+  const cyc = document.getElementById('setCycle');
+  cyc.oninput = e => { state.cycle = e.target.value === '' ? '' : Number(e.target.value); save(); };
+  cyc.onchange = e => {                     /* 1未満を入れても計算は3になるので、欄の数字も合わせる */
+    const v = num(e.target.value);
+    state.cycle = (v === null || v < 1) ? 3 : Math.round(v);
+    e.target.value = state.cycle; save();
+  };
+  const saf = document.getElementById('setSafety');
+  saf.oninput = e => { state.safety = e.target.value === '' ? 0 : Number(e.target.value); save(); };
+  saf.onchange = e => {
+    const v = num(e.target.value);
+    state.safety = (v === null || v < 0) ? 0 : v;
+    e.target.value = state.safety; save();
+  };
   document.getElementById('sugCalc').onclick = renderSuggest;
   document.getElementById('restHist').onclick = e => restoreHistory(e.currentTarget);
   document.getElementById('setLineOn').onchange = e => { state.lineOn = e.target.checked; save(); };
@@ -1834,7 +1917,7 @@ function renderMaster(){
     if(a !== b){ toast(pick('lockMismatch')); return; }
     const was = lockOn();
     state.pin = makePin(a); save(); flushSave();
-    unlocked = true; pinFail = 0; pinWaitUntil = 0;
+    unlocked = true; pinFailSet(0); pinWaitSet(0);
     toast(pick(was ? 'lockChanged' : 'lockEnabled'));
     renderMaster();
   };
@@ -1843,7 +1926,7 @@ function renderMaster(){
     const cur = document.getElementById('pinCur');
     if(!pinCheck(cur ? cur.value : '')){ toast(pick('lockWrong')); return; }
     state.pin = null; save(); flushSave();
-    unlocked = true; pinFail = 0; pinWaitUntil = 0;
+    unlocked = true; pinFailSet(0); pinWaitSet(0);
     toast(pick('lockDisabled'));
     renderMaster();
   };
@@ -1911,11 +1994,21 @@ function renderMaster(){
     };
   });
   app.querySelectorAll('[data-f]').forEach(el => {
-    const h = () => {
+    const h = ev => {
       const it = state.items.find(x => x.id === el.dataset.id);
       if(!it) return;
       const f = el.dataset.f;
-      it[f] = ['par','lot','price'].includes(f) ? (el.value === '' ? 0 : Number(el.value)) : el.value;
+      if(['par','lot','price'].includes(f)){
+        /* 数字の欄。打ち直し中の空欄では上書きせず、欄を離れたときに範囲を直す。
+           入数（lot）を0にするとロット換算が全部狂うため、1を下限にする。 */
+        const raw = String(el.value).trim();
+        if(raw === ''){ if(ev && ev.type === 'input') return; }
+        let v = num(raw);
+        if(v === null || !isFinite(v) || v < 0) v = 0;
+        if(f === 'lot' && !(v > 0)) v = 1;
+        it[f] = v;
+        if(ev && ev.type !== 'input' && String(v) !== raw) el.value = v;
+      } else it[f] = el.value;
       /* 基準在庫や入数を触ったら、横の実量表示もその場で合わせる */
       if(['par','lot'].includes(f)){
         const eq = app.querySelector(`[data-eq="${it.id}"]`);
@@ -2046,11 +2139,16 @@ app.addEventListener('input', e => {
   const t = e.target;
   if(t.dataset.recv){
     const p = state.prev[t.dataset.recv];
-    if(p){ p.received = t.value === '' ? null : Number(t.value); save(); updateRecvRow(t); }
+    if(p){
+      const v = num(t.value);
+      p.received = v === null ? null : Math.max(0, v);      /* マイナスは0扱い */
+      save(); updateRecvRow(t);
+    }
     return;
   }
   if(!t.dataset.count) return;
-  state.counts[t.dataset.count] = t.value === '' ? '' : t.value;
+  const c = num(t.value);
+  state.counts[t.dataset.count] = c === null ? '' : String(Math.max(0, c));
   save(); updateRow(t);
 });
 app.addEventListener('click', e => {
@@ -2096,6 +2194,7 @@ document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => go(b.data
   storeTitle.textContent = state.store || 'นับสต๊อก';
   go('count');
   renderHolBar();
+  if(clearedOnBoot) toast(pick('recCleared'));
   checkForUpdate();
   /* 起動のたびに共有マスタを見に行く。版が上がっていれば取り込む */
   pullMaster({});
