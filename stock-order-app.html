@@ -5,6 +5,7 @@
   :root{
     --paper:#E9EBE6; --card:#FFFFFF; --ink:#15181B; --muted:#5C6259; --line:#D2D7CB;
     --nori:#21252A; --ume:#B32133; --dashi:#A0701A; --take:#2E6B4F;
+    --ume-bg:#FBEDEF; --take-bg:#EAF4EE;
     --radius:10px; --bar:70px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -41,6 +42,14 @@
   main{padding:12px 12px 8px;max-width:620px;margin:0 auto}
   .hint{color:var(--muted);font-size:12.5px;margin:0 2px 12px}
 
+  /* 在庫を数える画面の進捗バー。品目を1件ずつ追わなくても全体の進み具合がわかるように */
+  .progresswrap{margin:0 2px 14px}
+  .prow{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;font-size:12.5px}
+  .prow b{font-size:13.5px}
+  .prow span{color:var(--muted)}
+  .ptrack{height:6px;border-radius:3px;background:#DEE1D7;overflow:hidden}
+  .pfill{height:100%;border-radius:3px;background:var(--nori);transition:width .2s}
+
   .filter{display:flex;gap:6px;overflow-x:auto;padding:0 2px 10px;margin:0 -2px 4px;scrollbar-width:none}
   .filter::-webkit-scrollbar{display:none}
   .filter button{flex:none;display:inline-flex;align-items:center;min-height:44px;max-width:min(190px,52vw);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:0 14px;font-size:13.5px;white-space:nowrap}
@@ -58,8 +67,11 @@
   .ghead .next{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap}
   .rows{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 
-  .row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-top:1px solid var(--line)}
+  .row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-top:1px solid var(--line);border-left:4px solid transparent}
   .row:first-child{border-top:none}
+  /* 発注が必要／足りている、を文字色だけでなく行全体の色でも示す（ステッパー操作中も視線の端で気づけるように） */
+  .row.need{background:var(--ume-bg);border-left-color:var(--ume)}
+  .row.ok{background:var(--take-bg);border-left-color:var(--take)}
   .row .info{flex:1;min-width:0}
   .row .nm{font-weight:600;font-size:15px;line-height:1.3}
   .row .nm .ja{font-size:.8em}
@@ -85,12 +97,14 @@
   .go{flex:none;background:var(--nori);color:#F2F3EF;border:none;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:700;text-align:center}
   .go:disabled{background:#C9CDC4;color:#3D4239}
 
-  .slip{background:var(--card);border:1px solid var(--line);border-radius:0 0 var(--radius) var(--radius);margin:0 0 18px;position:relative}
-  .slip::before{content:"";position:absolute;left:-1px;right:-1px;top:-7px;height:8px;background:radial-gradient(circle at 5px 0, transparent 5px, var(--line) 5px, var(--line) 6px, transparent 6px) repeat-x;background-size:10px 8px}
+  /* 発注リスト：仕入先ごとのカード。以前は伝票の切れ目風の飾りを付けていたが、
+     角丸カードに揃えて情報の区切りをはっきりさせた（■改善案） */
+  .slip{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:0 0 14px;position:relative;box-shadow:0 1px 2px rgba(21,24,27,.04)}
   .slip.shut{opacity:.82}
-  .slip .sup{display:flex;align-items:center;gap:8px;padding:12px 13px 10px;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+  .slip .sup{display:flex;align-items:center;gap:8px;padding:13px 14px 10px;border-bottom:1px dashed var(--line);flex-wrap:wrap}
   .slip .sup h3{margin:0;font-size:16px;font-weight:700}
-  .slip .sup .cnt{font-size:12px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .slip .sup .cnt{font-size:12px;color:var(--muted);white-space:nowrap}
+  .slip .sup .state{margin-left:auto}
   .slip .closed{width:100%;font-size:12px;color:#7A5A12;background:#FBF3E3;border:1px solid #E6D3A8;border-radius:7px;padding:7px 9px;margin-top:2px}
   .line{display:flex;gap:10px;padding:9px 13px;border-bottom:1px dashed var(--line);align-items:baseline}
   .line .n{flex:1} .line .q{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -122,11 +136,30 @@
   .sheetbox .warn{margin:0 0 10px}
   .sheetbox .brow + .brow{margin-top:8px}
   .sheetbox .brow{display:flex;gap:8px}
-  .sheetbox .brow button{flex:1;border-radius:9px;padding:11px 8px;font-size:13.5px;font-weight:700;border:1px solid var(--take);background:var(--take);color:#fff}
+  .sheetbox .brow button{flex:1;border-radius:12px;padding:12px 8px;font-size:13.5px;font-weight:700;border:1px solid var(--take);background:var(--take);color:#fff}
   .sheetbox .brow button.alt{background:transparent;color:var(--take)}
   .sheetbox .brow button:disabled{opacity:.5}
 
   .mcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;overflow:hidden}
+
+  /* 設定画面：大項目のアコーディオン。閉じた状態でも現在値がひと目でわかるようにする */
+  .secacc{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;overflow:hidden}
+  .secacc > summary{padding:12px 13px;display:flex;align-items:center;gap:10px;list-style:none;cursor:pointer;min-height:44px}
+  .secacc > summary::-webkit-details-marker{display:none}
+  .secacc .ico{flex:none;width:36px;height:36px;border-radius:9px;background:#EAE6DA;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .secacc .ttl{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .secacc .ttl .th-ja .th{font-weight:700;font-size:13.5px}
+  .secacc .ttl .th-ja .ja{font-size:.82em}
+  .secacc .ttl .sub{display:block;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .secacc .badge{flex:none;font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:999px;background:#E4EFE8;color:var(--take);white-space:nowrap}
+  .secacc .badge.off{background:#EFF0EA;color:var(--muted)}
+  .secacc .chev{flex:none;font-size:18px;color:var(--muted);transition:transform .15s}
+  .secacc[open] > summary .chev{transform:rotate(90deg)}
+  .secacc .secbody{padding:2px 13px 13px;border-top:1px dashed var(--line)}
+  .secacc .secbody .setrow{margin:11px 0 0;border:none;padding:0;background:transparent;grid-template-columns:1fr 1fr}
+  .secacc .secbody > .setrow:first-child{margin-top:11px}
+  .secacc .secbody .mcard{margin-top:10px}
+  .secacc .secbody .mcard:first-child{margin-top:0}
   .mcard summary{padding:11px 13px;font-weight:600;list-style:none;display:flex;gap:8px;align-items:center}
   .mcard summary::-webkit-details-marker{display:none}
   .mcard summary .nmwrap{flex:1;min-width:0}
@@ -155,6 +188,10 @@
   .holchips button::after{content:" ×";color:var(--ume);font-weight:700}
   .del{grid-column:1/-1;justify-self:start;background:none;border:none;color:var(--ume);font-size:12.5px;padding:4px 0;text-decoration:underline}
   .addbtn{width:100%;padding:13px;border:1px dashed var(--line);background:transparent;border-radius:var(--radius);color:var(--muted);font-weight:600;margin-bottom:22px}
+  /* マスタの共有：「配る」「取り込む」を色分けして見分けやすくする。
+     配る＝全端末に影響するので注意喚起の色（琥珀）、取り込む＝安全な同期なので落ち着いた色（緑） */
+  .addbtn.pushbtn{border-style:solid;border-color:var(--dashi);background:var(--dashi);color:#fff;font-weight:700}
+  .addbtn.pullbtn{border-style:solid;border-color:var(--take);background:var(--take);color:#fff;font-weight:700}
   .setrow{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 13px;margin-bottom:18px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
   .setrow label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
   .setrow label.wide{grid-column:1/-1}
@@ -307,6 +344,12 @@ const L = {
   noSupplier:['ยังไม่ได้กำหนดซัพพลายเออร์','仕入先未設定'],
   itemSect:['รายการวัตถุดิบ','品目'],
   supSect:['ซัพพลายเออร์','仕入先'],
+  genSect:['ตั้งค่าทั่วไป','基本設定'],
+  supCount:[' บริษัท',' 社'],
+  mstDirtyShort:['ยังไม่แชร์','未配信'],
+  itemCount:[' รายการ',' 品目'],
+  unitCount:[' หน่วย',' 種類'],
+  holUpDay:[' วัน',' 日'],
   addItem:['＋ เพิ่มรายการ','＋ 品目を追加'],
   addSup:['＋ เพิ่มซัพพลายเออร์','＋ 仕入先を追加'],
   delItem:['ลบรายการนี้','この品目を削除'],
@@ -900,6 +943,11 @@ function renderCount(){
     app.innerHTML = html + `<div class="empty">${pick('noItems')}</div>`;
     bindFilter(); bar.hidden = true; return;
   }
+  /* 入力の進み具合を最初に見せる。品目を1件ずつ追わなくても、全体の状況がひと目でわかるように */
+  const s0 = summary();
+  const pct = s0.total ? Math.round(s0.counted / s0.total * 100) : 0;
+  html += `<div class="progresswrap"><div class="prow"><b class="num">${s0.counted} / ${s0.total}${L.filled[state.lang==='ja'?1:0]}</b><span class="num">${pct}%</span></div>
+    <div class="ptrack"><div class="pfill" style="width:${pct}%"></div></div></div>`;
   const keys = state.groupBy === 'sup'
     ? [...new Set(list.map(i => i.supId || ''))]
     : [...new Set(list.map(i => i.cat || '-'))];
@@ -922,9 +970,11 @@ function renderCount(){
       const c = state.counts[it.id];
       const lots = orderLots(it);
       let flag = `<div class="flag blank">${pick('notFilled')}</div>`;
-      if(lots !== null) flag = lots > 0
-        ? `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${lotsLabel(it, lots)}</div>`
-        : `<div class="flag ok">${pick('enough')}</div>`;
+      let rowCls = '';
+      if(lots !== null) {
+        if(lots > 0){ flag = `<div class="flag need">${L.orderN[state.lang==='ja'?1:0]}${lotsLabel(it, lots)}</div>`; rowCls = ' need'; }
+        else { flag = `<div class="flag ok">${pick('enough')}</div>`; rowCls = ' ok'; }
+      }
       const s = supOf(it);
       /* 見出しに出ている情報はメタ行から省く（区分＝仕入先名の運用だと重複して2行に折り返すため） */
       const supLabel = s ? (state.lang === 'ja' ? (s.nameJa || s.name) : s.name) : '';
@@ -932,7 +982,7 @@ function renderCount(){
       const tail = state.groupBy === 'sup' ? (it.cat || '') : supLabel;
       const same = tail && head && tail.trim() === head.trim();
       const sub = `${L.parIs[state.lang==='ja'?1:0]}${lotsLabel(it, it.par)}${(tail && !same) ? '・' + esc(tail) : ''}`;
-      html += `<div class="row">
+      html += `<div class="row${rowCls}">
         <div class="info"><div class="nm">${nm(it)}</div><div class="meta num">${sub}</div>${flag}</div>
         <div class="stepwrap">
           <div class="stepper">
@@ -987,6 +1037,7 @@ function renderResult(){
     const url = g.sup ? (g.sup.url || '') : '';
     html += `<article class="slip ${g.ok?'':'shut'}">
       <div class="sup"><h3>${g.sup ? nm(g.sup) : pick('noSupplier')}</h3><span class="cnt num">${g.list.length}${L.items[state.lang==='ja'?1:0]}</span>
+      <span class="state ${g.ok?'open':'shut'}">${pick(g.ok?'canOrder':'cannotOrder')}</span>
       ${g.ok ? '' : `<div class="closed">${esc(closedReason(g.sup))} → ${L.nextOrderDay[state.lang==='ja'?1:0]}${dateLabel(nextOrderDate(g.sup))}</div>`}</div>`;
     for(const r of g.list){
       const c = num(state.counts[r.it.id]);
@@ -1670,7 +1721,17 @@ function bindSheet(){
 
 /* ============ 設定 ============ */
 function renderMaster(){
-  let html = `<div class="setrow">
+  const op = k => secOpen[k] ? ' open' : '';
+  const chev = `<span class="chev">›</span>`;
+  const lineIsOn = state.lineOn !== false;
+  const isLocked = lockOn();
+  const unitsN = (state.units||[]).length;
+  const supN = state.suppliers.length;
+  const itemN = state.items.length;
+
+  let html = `<details class="secacc" data-sec="basic"${op('basic')}>
+    <summary><span class="ico">⚙️</span><span class="ttl"><span class="th-ja">${two('genSect')}</span><span class="sub">${esc(state.store) || '—'}</span></span>${chev}</summary>
+    <div class="secbody"><div class="setrow">
     <label class="wide">${two('fStore')}<input id="setStore" value="${esc(state.store)}"></label>
     <label>${two('fCur')}<select id="setCur">
       <option value="฿" ${state.currency==='฿'?'selected':''}>บาท (฿)</option>
@@ -1690,9 +1751,11 @@ function renderMaster(){
     <p class="cap">${pick('sheetCap')}</p>
     <p class="cap verrow"><span class="num">${pick('fVersion')}：${esc(buildStamp())}</span>
       <button type="button" id="chkUpd">${pick('updCheck')}</button></p>
-  </div>`;
+  </div></div></details>`;
 
-  html += `<p class="secttl">${one('lineSect')}</p>
+  html += `<details class="secacc" data-sec="line"${op('line')}>
+    <summary><span class="ico">💬</span><span class="ttl"><span class="th-ja">${two('lineSect')}</span><span class="sub">${pick('lineOn')}</span></span><span class="badge ${lineIsOn?'':'off'}">${lineIsOn?'ON':'OFF'}</span>${chev}</summary>
+    <div class="secbody">
     <div class="setrow">
       <p class="cap" style="margin:0">${pick('lineDesc')}</p>
       <label class="wide" style="flex-direction:row;align-items:center;gap:8px">
@@ -1700,9 +1763,12 @@ function renderMaster(){
         <span>${pick('lineOn')}</span></label>
       <p class="cap">${pick('lineNote')}</p>
     </div>
-    <button class="addbtn" id="lineTestBtn" style="margin-bottom:16px">${one('lineTestBtn')}</button>`;
+    <button class="addbtn" id="lineTestBtn" style="margin-bottom:2px">${one('lineTestBtn')}</button>
+    </div></details>`;
 
-  html += `<p class="secttl">${one('mstSect')}</p>
+  html += `<details class="secacc" data-sec="master"${op('master')}>
+    <summary><span class="ico">🔄</span><span class="ttl"><span class="th-ja">${two('mstSect')}</span><span class="sub">${state.masterRev ? (pick('mstState')+'：'+state.masterRev) : pick('mstNever')}</span></span><span class="badge ${masterDirty()?'off':''}">${masterDirty() ? pick('mstDirtyShort') : (state.masterRev ? '#'+state.masterRev : '—')}</span>${chev}</summary>
+    <div class="secbody">
     <div class="setrow">
       <p class="cap" style="margin:0">${pick('mstDesc')}</p>
       <p class="cap">${pick('mstState')}：${state.masterRev
@@ -1710,27 +1776,36 @@ function renderMaster(){
         : pick('mstNever')}</p>
       ${masterDirty() ? `<p class="cap" style="color:var(--warn,#a15c00)">${pick('mstLocal')}</p>` : ''}
     </div>
-    <button class="addbtn" id="mstPushBtn">${one('mstPush')}</button>
-    <button class="addbtn" id="mstPullBtn" style="margin-bottom:16px">${one('mstPull')}</button>`;
+    <button class="addbtn pushbtn" id="mstPushBtn">${one('mstPush')}</button>
+    <button class="addbtn pullbtn" id="mstPullBtn" style="margin-bottom:2px">${one('mstPull')}</button>
+    </div></details>`;
 
-  html += `<p class="secttl">${one('lockSect')}</p>
+  html += `<details class="secacc" data-sec="lock"${op('lock')}>
+    <summary><span class="ico">🔒</span><span class="ttl"><span class="th-ja">${two('lockSect')}</span><span class="sub">${pick(isLocked ? 'lockStateOn' : 'lockStateOff')}</span></span><span class="badge ${isLocked?'':'off'}">${isLocked?'ON':'OFF'}</span>${chev}</summary>
+    <div class="secbody">
     <div class="setrow">
       <p class="cap" style="margin:0">${pick('lockDesc')}</p>
-      <p class="cap"><b>${pick(lockOn() ? 'lockStateOn' : 'lockStateOff')}</b></p>
-      ${lockOn() ? `<label class="wide">${two('lockCurrent')}<input type="password" inputmode="numeric" maxlength="8" autocomplete="off" id="pinCur"></label>` : ''}
+      <p class="cap"><b>${pick(isLocked ? 'lockStateOn' : 'lockStateOff')}</b></p>
+      ${isLocked ? `<label class="wide">${two('lockCurrent')}<input type="password" inputmode="numeric" maxlength="8" autocomplete="off" id="pinCur"></label>` : ''}
       <label class="wide">${two('lockNew')}<input type="password" inputmode="numeric" maxlength="8" autocomplete="off" id="pinNew"></label>
       <label class="wide">${two('lockConfirm')}<input type="password" inputmode="numeric" maxlength="8" autocomplete="off" id="pinNew2"></label>
       <p class="cap">${pick('lockForgot')}</p>
-      ${lockOn() ? `<p class="cap">${pick('lockRelock')}</p>` : ''}
+      ${isLocked ? `<p class="cap">${pick('lockRelock')}</p>` : ''}
     </div>
-    <button class="addbtn" id="pinSave">${one(lockOn() ? 'lockChange' : 'lockEnable')}</button>
-    ${lockOn() ? `<div style="margin:-14px 0 18px"><button class="danger" id="pinOff">${one('lockDisable')}</button></div>` : ''}`;
+    <button class="addbtn" id="pinSave">${one(isLocked ? 'lockChange' : 'lockEnable')}</button>
+    ${isLocked ? `<div style="margin:-14px 0 2px"><button class="danger" id="pinOff">${one('lockDisable')}</button></div>` : ''}
+    </div></details>`;
 
-  html += `<p class="secttl">${one('unitSect')}</p>
+  html += `<details class="secacc" data-sec="unit"${op('unit')}>
+    <summary><span class="ico">📏</span><span class="ttl"><span class="th-ja">${two('unitSect')}</span><span class="sub">${(state.units||[]).slice(0,4).join('・')}${unitsN>4?'…':''}</span></span><span class="badge">${unitsN}${L.unitCount[state.lang==='ja'?1:0]}</span>${chev}</summary>
+    <div class="secbody">
     <div class="holchips">${(state.units||[]).map(u => `<button type="button" data-unitdel="${esc(u)}">${esc(u)}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
-    <div class="add"><input type="text" id="newUnitInput" placeholder="${pick('newUnit')}"><button type="button" id="addUnitBtn">${pick('addBtn')}</button></div>`;
+    <div class="add"><input type="text" id="newUnitInput" placeholder="${pick('newUnit')}"><button type="button" id="addUnitBtn">${pick('addBtn')}</button></div>
+    </div></details>`;
 
-  html += `<p class="secttl">${one('sugSect')}</p>
+  html += `<details class="secacc" data-sec="sugg"${op('sugg')}>
+    <summary><span class="ico">📈</span><span class="ttl"><span class="th-ja">${two('sugSect')}</span><span class="sub">${pick('sugCycle')} ${Number(state.cycle)||3}${state.lang==='ja'?'日':' วัน'}・${pick('sugSafety')} ${Number(state.safety)||0}%</span></span>${chev}</summary>
+    <div class="secbody">
     <div class="setrow">
       <p class="cap" style="margin:0">${pick('sugDesc')}</p>
       <label>${two('sugCycle')}<input type="number" step="1" min="1" inputmode="numeric" id="setCycle" value="${Number(state.cycle) || 3}"></label>
@@ -1755,14 +1830,17 @@ function renderMaster(){
     <div class="setrow" style="margin-top:14px">
       <p class="cap" style="margin:0">${pick('restDesc')}</p>
     </div>
-    <button class="addbtn" id="restHist">${one('restTitle')}</button>`;
+    <button class="addbtn" id="restHist" style="margin-bottom:2px">${one('restTitle')}</button>
+    </div></details>`;
 
   const holToday = ymd(new Date());
   const holUp = (state.hol || []).filter(h => h.d >= holToday).slice(0, 12);
   const holShort = d => String(d).slice(0, 4) === String(new Date().getFullYear())
     ? String(d).slice(5).replace('-', '/')
     : String(d).replace(/-/g, '/');   /* 年をまたぐぶんは年も出す */
-  html += `<p class="secttl">${one('holSect')}</p>
+  html += `<details class="secacc" data-sec="hol"${op('hol')}>
+    <summary><span class="ico">📅</span><span class="ttl"><span class="th-ja">${two('holSect')}</span><span class="sub">${holUp.length ? (holShort(holUp[0].d)+' '+esc(holName(holUp[0]))) : pick('holNone')}</span></span><span class="badge">${(state.hol||[]).length}</span>${chev}</summary>
+    <div class="secbody">
     <div class="setrow">
       <p class="cap" style="margin:0">${pick('holDesc')}</p>
       <p class="cap">${(state.hol || []).length ? pick('holCount').replace(/%n/g, state.hol.length) : pick('holNone')}</p>
@@ -1776,9 +1854,12 @@ function renderMaster(){
     <div class="holchips" style="margin-bottom:16px">${holUp.map(h => `<button type="button" data-holdel2="${esc(h.d)}" data-n="${esc(h.th)}">${esc(holShort(h.d))} ${esc(holName(h))}</button>`).join('') || `<span class="note">${pick('none')}</span>`}</div>
     ${Object.keys(TH_HOLIDAYS).map(y => `<button class="addbtn" type="button" data-holy="${y}" style="margin-bottom:8px">${one('holAddY').replace(/%n/g, y)}</button>`).join('')}
     <p class="cap" style="margin:4px 2px 14px;font-size:11px;color:var(--muted)">${pick('holNote')}</p>
-    <div style="margin-bottom:16px"><button class="danger" id="holClearBtn">${one('holClear')}</button></div>`;
+    <div style="margin-bottom:2px"><button class="danger" id="holClearBtn">${one('holClear')}</button></div>
+    </div></details>`;
 
-  html += `<p class="secttl">${one('supSect')}</p>`;
+  html += `<details class="secacc" data-sec="sup"${op('sup')}>
+    <summary><span class="ico">🏢</span><span class="ttl"><span class="th-ja">${two('supSect')}</span><span class="sub">${supN}${L.supCount[state.lang==='ja'?1:0]}登録</span></span><span class="badge">${supN}</span>${chev}</summary>
+    <div class="secbody">`;
   for(const s of state.suppliers){
     html += `<details class="mcard">
       <summary><span class="nmwrap">${nm(s)}</span><span class="s">${esc(restLabel(s) || pick('noClosed'))}${s.cutoff ? ' / '+esc(s.cutoff) : ''}<br>${L.nextOrderDay[state.lang==='ja'?1:0]}${dateLabel(nextOrderDate(s))}</span></summary>
@@ -1801,9 +1882,12 @@ function renderMaster(){
         <button class="del" data-supdel="${s.id}">${one('delSup')}</button>
       </div></details>`;
   }
-  html += `<button class="addbtn" id="addSup">${one('addSup')}</button>`;
+  html += `<button class="addbtn" id="addSup" style="margin-bottom:2px">${one('addSup')}</button>
+    </div></details>`;
 
-  html += `<p class="secttl">${one('itemSect')}</p>`;
+  html += `<details class="secacc" data-sec="item"${op('item')}>
+    <summary><span class="ico">📦</span><span class="ttl"><span class="th-ja">${two('itemSect')}</span><span class="sub">${itemN}${L.itemCount[state.lang==='ja'?1:0]}登録</span></span><span class="badge">${itemN}</span>${chev}</summary>
+    <div class="secbody">`;
   for(const it of state.items){
     const s = supOf(it);
     html += `<details class="mcard">
@@ -1831,12 +1915,15 @@ function renderMaster(){
         <button class="del" data-del="${it.id}">${one('delItem')}</button>
       </div></details>`;
   }
-  html += `<button class="addbtn" id="addItem">${one('addItem')}</button>
-    <div><button class="danger" id="resetAll">${one('resetAll')}</button></div>
+  html += `<button class="addbtn" id="addItem" style="margin-bottom:2px">${one('addItem')}</button>
+    </div></details>`;
+
+  html += `<div style="margin-top:16px"><button class="danger" id="resetAll">${one('resetAll')}</button></div>
     <div><button class="danger" id="clearHist">${one('histClear')}</button></div>`;
 
   app.innerHTML = html;
   bar.hidden = true;
+  bindSecAcc();
 
   document.getElementById('setStore').oninput = e => { state.store = e.target.value; storeTitle.textContent = state.store || 'นับสต๊อก'; save(); };
   document.getElementById('setCur').onchange = e => { state.currency = e.target.value; save(); renderMaster(); };
@@ -2103,6 +2190,14 @@ async function checkForUpdate(manual){
 const app = document.getElementById('app');
 const bar = document.getElementById('bar');
 const storeTitle = document.getElementById('storeTitle');
+/* 設定画面のアコーディオン開閉状態。保存はしない（毎回すべて閉じた状態からで良い項目もあるため）。
+   基本設定・マスタの共有だけ最初から開いておく。 */
+let secOpen = {basic:true, line:false, master:true, lock:false, unit:false, sugg:false, hol:false, sup:false, item:false};
+function bindSecAcc(){
+  app.querySelectorAll('details[data-sec]').forEach(d => {
+    d.ontoggle = () => { secOpen[d.dataset.sec] = d.open; };
+  });
+}
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function dateStr(){ const d = new Date(); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()} (${wd(d.getDay())})`; }
 function applyLang(){ document.body.className = state.lang === 'both' ? '' : 'lang-' + state.lang; }
