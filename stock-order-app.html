@@ -2265,17 +2265,35 @@ app.addEventListener('click', e => {
   input.value = next; state.counts[b.dataset.id] = String(next);
   save(); updateRow(input);
 });
+/* 画面上部の進捗バーの数字と帯を書き換える。
+   入力のたびにここを通さないと、画面を描き直すまで 0 のまま止まる */
+function updateProgress(s){
+  const wrap = app.querySelector('.progresswrap');
+  if(!wrap) return;
+  const st = s || summary();
+  const pct = st.total ? Math.round(st.counted / st.total * 100) : 0;
+  const nums = wrap.querySelectorAll('.prow .num');
+  if(nums[0]) nums[0].textContent = `${st.counted} / ${st.total}${L.filled[state.lang==='ja'?1:0]}`;
+  if(nums[1]) nums[1].textContent = `${pct}%`;
+  const fill = wrap.querySelector('.pfill');
+  if(fill) fill.style.width = pct + '%';
+}
 function updateRow(input){
   const it = state.items.find(x => x.id === input.dataset.count);
   const lots = orderLots(it);
-  const flag = input.closest('.row').querySelector('.flag');
+  const row = input.closest('.row');
+  const flag = row.querySelector('.flag');
   if(lots === null){ flag.className='flag blank'; flag.textContent = pick('notFilled'); }
   else if(lots > 0){
     flag.className='flag need';
     flag.textContent = `${L.orderN[state.lang==='ja'?1:0]}${lotsLabel(it, lots)}`;
   }
   else { flag.className='flag ok'; flag.textContent = pick('enough'); }
+  /* 行の色分けも、描き直しを待たずにここで切り替える */
+  row.classList.toggle('need', lots !== null && lots > 0);
+  row.classList.toggle('ok', lots === 0);
   const s = summary();
+  updateProgress(s);
   const sum = bar.querySelector('.sum');
   if(sum) sum.innerHTML = `<b class="num">${s.counted} / ${s.total}${L.filled[state.lang==='ja'?1:0]}</b>${s.need}${L.shortN[state.lang==='ja'?1:0]}${money(s.amount)}`;
   const g = document.getElementById('toResult');
