@@ -531,6 +531,16 @@ const L = {
   mstHold:['กำลังนับสต๊อก จะดึงข้อมูลใหม่ทีหลัง','在庫を数えている途中のため、マスタの取り込みはあとにしました'],
   recAllSup:['จะบันทึกทุกชัพพลาเออร์ ไม่ใช่เฉพาะที่กรองไว้','絞り込み中ですが、記録とLINE通知は全仕入先分が対象になります'],
   recCleared:['บันทึกแล้ว ล้างจำนวนที่กรอกไว้แล้ว','記録済みのため、在庫の入力をクリアしました'],
+  mstImpTtl:['นำเข้ามาสเตอร์ (วางข้อความ JSON)','マスタを取り込む（JSONを貼り付け）'],
+  mstImpDesc:['วางข้อความ JSON หรือเลือกไฟล์ .json แล้วกด "นำเข้า" ข้อมูลจะเข้าเฉพาะเครื่องนี้ ตรวจสอบแล้วกด "แชร์ข้อมูลของเครื่องนี้ให้ทุกเครื่อง"','JSONを貼り付けるか .json ファイルを選んで「取り込む」を押します。入るのはこの端末だけです。確認してから「この端末の内容を全端末に配る」を押してください'],
+  mstImpBtn:['นำเข้า','取り込む'],
+  mstImpFile:['เลือกไฟล์ .json','.jsonファイルを選ぶ'],
+  mstImpEmpty:['ยังไม่ได้วางข้อความ','貼り付けがまだありません'],
+  mstImpBad:['อ่านข้อมูลไม่ได้ (รูปแบบ JSON ไม่ถูกต้อง หรือไม่มีรายการวัตถุดิบ)','読み取れませんでした（JSONの形式が違うか、品目がありません）'],
+  mstImpBadSup:['มีรายการที่ไม่มีซัพพลายเออร์ตรงกัน: %s','仕入先が見つからない品目があります：%s'],
+  mstImpConfirm:['รายการ %n รายการ (แก้ไข %c / เพิ่ม %a / ลบ %d) ซัพพลายเออร์ %s ราย จะแทนที่มาสเตอร์ของเครื่องนี้ ดำเนินการต่อหรือไม่','品目 %n件（変更 %c／追加 %a／削除 %d）・仕入先 %s社で、この端末のマスタを置き換えます。よろしいですか？'],
+  mstImpDone:['นำเข้าแล้ว ตรวจสอบแล้วกด "แชร์ข้อมูลของเครื่องนี้ให้ทุกเครื่อง"','取り込みました。内容を確認してから「全端末に配る」を押してください'],
+  mstStoreDefault:['ชื่อสาขายังเป็นค่าเริ่มต้น (สาขาหลัก) ต้องการแชร์ต่อหรือไม่','店舗名が初期値（สาขาหลัก）のままです。このまま配りますか？'],
   mstUpToDate:['เป็นเวอร์ชันล่าสุดอยู่แล้ว','すでに最新です'],
   mstNone:['ยังไม่มีข้อมูลที่แชร์ไว้ กดปุ่มด้านบนเพื่อแชร์ครั้งแรก','まだ配られたマスタがありません。上のボタンで最初の配信をしてください'],
   mstErr:['เชื่อมต่อไม่สำเร็จ','通信できませんでした'],
@@ -1370,6 +1380,43 @@ function applyMaster(d){
   if(state.supFilter && !state.suppliers.some(x => x.id === state.supFilter)) state.supFilter = null;
   return true;
 }
+/* 貼り付けたJSONでこの端末のマスタを置き換える（配るのは別操作）。
+   ?mode=master の応答（{ok,rev,data:{...}}）も、data部分だけ（{ver,items,...}）も受け付ける。 */
+function importMaster(text){
+  const t = String(text || '').replace(/^\uFEFF/, '').trim();
+  if(!t){ toast(pick('mstImpEmpty')); return false; }
+  let d;
+  try{ d = JSON.parse(t); }catch(e){ toast(pick('mstImpBad')); return false; }
+  if(d && typeof d.json === 'string'){ try{ d = JSON.parse(d.json); }catch(e){ d = null; } }
+  if(d && d.data && typeof d.data === 'object') d = d.data;
+  if(!d || !Array.isArray(d.items) || !d.items.length || !d.items.every(i => i && i.id && (i.name || i.nameJa))){
+    toast(pick('mstImpBad')); return false;
+  }
+  if(!(Number(d.ver) >= 2)) d.ver = DATA_VER;
+  const sups = Array.isArray(d.suppliers) && d.suppliers.length ? d.suppliers : state.suppliers;
+  const sids = new Set(sups.map(x => x.id));
+  const lost = d.items.filter(i => !sids.has(i.supId)).map(i => i.nameJa || i.name);
+  if(lost.length){ toast(pick('mstImpBadSup').replace(/%s/g, lost.slice(0,3).join('、') + (lost.length > 3 ? '…' : ''))); return false; }
+  const cur = new Map(state.items.map(i => [i.id, i]));
+  const keys = ['name','nameJa','cat','unit','par','lot','lotUnit','price','supId'];
+  let c = 0, a = 0;
+  for(const it of d.items){
+    const o = cur.get(it.id);
+    if(!o){ a++; continue; }
+    if(keys.some(k => String(o[k] ?? '') !== String(it[k] ?? ''))) c++;
+  }
+  const newIds = new Set(d.items.map(i => i.id));
+  const del = state.items.filter(i => !newIds.has(i.id)).length;
+  const msg = pick('mstImpConfirm').replace(/%n/g, d.items.length).replace(/%c/g, c).replace(/%a/g, a).replace(/%d/g, del).replace(/%s/g, sups.length);
+  if(!confirm(msg)) return false;
+  if(!applyMaster({ver:d.ver, items:d.items, suppliers:sups, units:d.units, hol:d.hol})) return false;
+  /* 単位リストに無い単位が品目にあれば足しておく（選択肢から消えないように） */
+  for(const it of state.items) if(it.unit && !state.units.includes(it.unit)) state.units.push(it.unit);
+  save(); flushSave();
+  toast(pick('mstImpDone'));
+  go(view);
+  return true;
+}
 let mstBusy = false;
 /* opts.manual … 設定画面のボタンから呼ばれた（メッセージを必ず出す） */
 async function pullMaster(opts){
@@ -1418,6 +1465,7 @@ async function pushMaster(btn){
     const who = `${(meta && meta.updatedAt) || ''} ${(meta && meta.by) || ''}`.trim();
     if(!confirm(pick('mstNewer').replace('%s', who))) return;
   }
+  if(!(state.store || '').trim() || state.store === 'สาขาหลัก'){ if(!confirm(pick('mstStoreDefault'))) return; }
   if(!confirm(pick('mstPushConfirm'))) return;
   const label = btn.textContent;
   btn.disabled = true; btn.textContent = pick('mstSending');
@@ -1778,6 +1826,13 @@ function renderMaster(){
     </div>
     <button class="addbtn pushbtn" id="mstPushBtn">${one('mstPush')}</button>
     <button class="addbtn pullbtn" id="mstPullBtn" style="margin-bottom:2px">${one('mstPull')}</button>
+    <div class="setrow" style="margin-top:10px">
+      <p class="cap" style="margin:0"><b>${pick('mstImpTtl')}</b></p>
+      <p class="cap">${pick('mstImpDesc')}</p>
+      <textarea id="mstImpTxt" rows="4" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:8px;border:1px solid var(--line,#ccc);border-radius:10px;background:var(--card,#fff);color:inherit" placeholder='{"ver":2,"items":[...]}'></textarea>
+      <label class="cap" style="display:block;margin-top:6px">${pick('mstImpFile')}<input type="file" id="mstImpFile" accept=".json,.txt,application/json,text/plain" style="display:block;margin-top:4px;max-width:100%"></label>
+    </div>
+    <button class="addbtn" id="mstImpBtn" style="margin-bottom:2px">${one('mstImpBtn')}</button>
     </div></details>`;
 
   html += `<details class="secacc" data-sec="lock"${op('lock')}>
@@ -1949,6 +2004,14 @@ function renderMaster(){
   document.getElementById('setLineOn').onchange = e => { state.lineOn = e.target.checked; save(); };
   document.getElementById('lineTestBtn').onclick = e => lineTest(e.currentTarget);
   document.getElementById('mstPushBtn').onclick = e => pushMaster(e.currentTarget);
+  document.getElementById('mstImpFile').onchange = e => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => { document.getElementById('mstImpTxt').value = String(r.result || ''); };
+    r.readAsText(f, 'utf-8');
+  };
+  document.getElementById('mstImpBtn').onclick = () => importMaster(document.getElementById('mstImpTxt').value);
   document.getElementById('mstPullBtn').onclick = async e => {
     const b = e.currentTarget, t = b.textContent;
     b.disabled = true; b.textContent = pick('mstLoading');
