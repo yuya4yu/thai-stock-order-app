@@ -24,7 +24,15 @@ function doPost(e) {
   var lineText = '';
   var result = null;
   const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  // waitLock は取れないと例外を投げる。try の外で投げるとアプリ側（no-cors）は成功と
+  // 誤認して記録が消えるため、中で捕まえて ok:false を返す。
+  var locked = false;
+  try {
+    lock.waitLock(20000);
+    locked = true;
+  } catch (errLock) {
+    return json_({ ok: false, error: 'busy: ' + String(errLock) });
+  }
   try {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -60,7 +68,7 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {
-    lock.releaseLock();
+    if (locked) lock.releaseLock();
   }
 
   // LINEへの送信はロックを外してから行う（他の店舗の記録を待たせないため）。
@@ -162,7 +170,10 @@ function history_(store, days) {
         rows.push({ id: ids[k], d: list[j].d, used: used, days: gap });
       }
       var last = list[list.length - 1];
-      prev.push({ id: ids[k], stock: numOr_(last.stock), order: numOr_(last.order), date: last.d });
+      // 何ヶ月も前の発注が納品待ちに溜まらないよう、days の範囲に入る記録だけ返す
+      if (last.d >= from) {
+        prev.push({ id: ids[k], stock: numOr_(last.stock), order: numOr_(last.order), date: last.d });
+      }
     }
     return { ok: true, rows: rows, prev: prev, store: store };
   } catch (err) {
