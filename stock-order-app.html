@@ -17,7 +17,7 @@
     padding-bottom:calc(var(--bar) + env(safe-area-inset-bottom));
   }
   .num{font-variant-numeric:tabular-nums}
-  button{font:inherit;color:inherit;cursor:pointer}
+  button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
   input,select{font:inherit;color:inherit}
   :focus-visible{outline:2px solid var(--take);outline-offset:2px}
 
@@ -83,9 +83,9 @@
   .stepwrap{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px}
   .stepwrap .ulab{font-size:10.5px;color:var(--muted);line-height:1.1;max-width:150px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .stepper{display:flex;align-items:center;gap:4px;flex:none}
-  .stepper button{width:44px;height:44px;border:1px solid var(--line);background:#F7F8F5;border-radius:8px;font-size:20px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+  .stepper button{width:52px;height:52px;border:1px solid var(--line);background:#F7F8F5;border-radius:10px;font-size:24px;font-weight:600;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
   .stepper button:active{background:#E6E8E2}
-  .stepper input{width:64px;height:44px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;padding:0 2px}
+  .stepper input{width:70px;height:52px;text-align:center;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;padding:0 2px}
   .stepper input::placeholder{color:var(--muted);font-weight:500;font-size:14px}
   .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .stepper input[type=number]{-moz-appearance:textfield}
@@ -690,6 +690,9 @@ document.addEventListener('visibilitychange', () => {
     flushSave();
     unlocked = false;                       /* アプリを離れたら設定画面は再びロックする */
   }else{
+    /* バックグラウンドから戻ってきたときも、前回「発注を記録する」で終わっていれば在庫入力をクリアする。
+       これまでは起動時（load）にしかこの判定をしておらず、アプリを完全に閉じ直さない限り在庫が残ったままだった */
+    if(clearCountsIfPending()){ flushSave(); go(view); toast(pick('recCleared')); }
     if(view === 'master' && lockOn() && !unlocked) go('master');
     checkForUpdate();
     /* 在庫を数えている最中は画面が入れ替わらないよう、取り込みを見送る */
@@ -741,17 +744,22 @@ async function load(){
   state.suppliers = state.suppliers.map(normSup);
   state.items = (Array.isArray(state.items) ? state.items : []).map(normItem);
   /* 前回「発注を記録する」で終わっていたら、在庫の入力は空から始める */
-  if(state.clearNext){
-    state.counts = {};
-    state.clearNext = false;
-    state.recordedSig = '';
-    clearedOnBoot = true;
-    save();
-  }
+  clearCountsIfPending();
   /* 一度も配信・取込をしていない端末でも、この端末の変更を黙って消さないための基準値 */
   if(!state.masterSig) state.masterSig = masterSig();
 }
 let clearedOnBoot = false;
+/* 「発注を記録する」のあと在庫入力をクリアする処理を1箇所にまとめる。
+   起動時（load）だけでなく、アプリをバックグラウンドから開き直したとき（visibilitychange）にも呼べるようにする */
+function clearCountsIfPending(){
+  if(!state.clearNext) return false;
+  state.counts = {};
+  state.clearNext = false;
+  state.recordedSig = '';
+  clearedOnBoot = true;
+  save();
+  return true;
+}
 
 /* ---------- 設定画面のロック（暗証番号） ----------
    基準在庫・単価・仕入先情報を店舗スタッフが変更できないようにするための簡易ロック。
